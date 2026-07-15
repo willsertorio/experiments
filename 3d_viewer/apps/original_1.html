@@ -1,0 +1,353 @@
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diamond Engagement Ring - 3D</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#ffffff; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+  canvas { display:block; width:100%; height:100%; outline:none; }
+  .label {
+    position:absolute; bottom:24px; left:50%; transform:translateX(-50%);
+    color:#222; font-size:13px; letter-spacing:0.12em; text-transform:uppercase;
+    background:rgba(255,255,255,0.7); backdrop-filter:blur(10px);
+    padding:10px 18px; border-radius:30px; border:1px solid rgba(0,0,0,0.06);
+    pointer-events:none; user-select:none;
+  }
+  .vignette {
+    position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient( ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.06) 100% );
+  }
+</style>
+<script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="vignette"></div>
+<div class="label">Platinum • Round Brilliant Diamond Halo • Drag to Rotate</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.35;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0xffffff, 1);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(22, window.innerWidth/window.innerHeight, 0.1, 50);
+camera.position.set(0, 0.65, 2.85);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 1.8;
+controls.maxDistance = 4.5;
+controls.target.set(0, 0.18, 0);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.4;
+
+RectAreaLightUniformsLib.init();
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+
+// Environment
+new RGBELoader()
+  .load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_03_1k.hdr', (hdr) => {
+    const env = pmrem.fromEquirectangular(hdr).texture;
+    scene.environment = env;
+    hdr.dispose();
+    pmrem.dispose();
+  });
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+const keyLight = new THREE.RectAreaLight(0xfff8f0, 8, 3, 3);
+keyLight.position.set(-2.2, 2.5, 1.8);
+keyLight.lookAt(0,0,0);
+scene.add(keyLight);
+
+const fillLight = new THREE.RectAreaLight(0xe8f4ff, 4, 2, 2);
+fillLight.position.set(2.0, 1.5, 1.5);
+fillLight.lookAt(0,0,0);
+scene.add(fillLight);
+
+const rim = new THREE.DirectionalLight(0xffffff, 1.2);
+rim.position.set(0.5, 2.5, -2.5);
+rim.castShadow = true;
+rim.shadow.mapSize.set(2048,2048);
+rim.shadow.camera.near = 0.5;
+rim.shadow.camera.far = 8;
+rim.shadow.camera.left = -2;
+rim.shadow.camera.right = 2;
+rim.shadow.camera.top = 2;
+rim.shadow.camera.bottom = -2;
+rim.shadow.bias = -0.0005;
+rim.shadow.radius = 4;
+scene.add(rim);
+
+// Floor
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(8, 64),
+  new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.95, metalness:0 })
+);
+floor.rotation.x = -Math.PI/2;
+floor.position.y = -0.55;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Ring group
+const ring = new THREE.Group();
+ring.rotation.x = 0.35;
+ring.rotation.z = -0.12;
+scene.add(ring);
+
+// Materials
+const platinum = new THREE.MeshPhysicalMaterial({
+  color: 0xf2f4f7,
+  metalness: 1.0,
+  roughness: 0.07,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.03,
+  reflectivity: 0.9
+});
+
+const diamondMat = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff,
+  metalness: 0,
+  roughness: 0.0,
+  transmission: 1.0,
+  thickness: 0.8,
+  ior: 2.42,
+  specularIntensity: 1.0,
+  specularColor: 0xffffff,
+  envMapIntensity: 3.2,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.05,
+  attenuationDistance: 0,
+  attenuationColor: 0xffffff,
+  transparent: true,
+  opacity: 1.0
+});
+diamondMat.dispersion = 0.04;
+
+// Band
+const bandRadius = 0.85;
+const bandTube = 0.068;
+const bandGeo = new THREE.TorusGeometry(bandRadius, bandTube, 32, 200);
+const band = new THREE.Mesh(bandGeo, platinum);
+band.rotation.x = Math.PI/2;
+band.castShadow = true;
+band.receiveShadow = true;
+ring.add(band);
+
+// Slight taper toward bottom
+const bandInner = new THREE.Mesh(
+  new THREE.TorusGeometry(bandRadius-0.008, bandTube*0.92, 24, 180),
+  platinum
+);
+bandInner.rotation.x = Math.PI/2;
+ring.add(bandInner);
+
+// Basket / gallery
+const basket = new THREE.Group();
+for(let i=0;i<4;i++){
+  const ang = i*Math.PI/2 + Math.PI/4;
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(Math.cos(ang)*0.22, 0.12, Math.sin(ang)*0.22),
+    new THREE.Vector3(Math.cos(ang)*0.28, 0.24, Math.sin(ang)*0.28),
+    new THREE.Vector3(Math.cos(ang)*0.21, 0.38, Math.sin(ang)*0.21)
+  ]);
+  const tube = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 24, 0.012, 12, false),
+    platinum
+  );
+  tube.castShadow = true;
+  basket.add(tube);
+}
+// under gallery filigree
+const gallery = new THREE.Mesh(
+  new THREE.SphereGeometry(0.175, 24, 16, 0, Math.PI*2, 0, Math.PI*0.55),
+  new THREE.MeshPhysicalMaterial({ ...platinum, wireframe:true, roughness:0.15 })
+);
+gallery.position.y = 0.16;
+gallery.scale.y = 0.7;
+basket.add(gallery);
+ring.add(basket);
+
+// Prongs
+const prongGeo = new THREE.CylinderGeometry(0.028, 0.038, 0.36, 16);
+for(let i=0;i<4;i++){
+  const ang = i*Math.PI/2 + Math.PI/4;
+  const prong = new THREE.Mesh(prongGeo, platinum);
+  prong.position.set(Math.cos(ang)*0.22, 0.30, Math.sin(ang)*0.22);
+  prong.rotation.z = Math.cos(ang)*0.22;
+  prong.rotation.x = -Math.sin(ang)*0.22;
+  prong.castShadow = true;
+  ring.add(prong);
+  // claw tip
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.032, 16,16), platinum);
+  tip.position.set(Math.cos(ang)*0.195, 0.475, Math.sin(ang)*0.195);
+  ring.add(tip);
+}
+
+// Center diamond - brilliant cut approximation
+const centerGeo = new THREE.IcosahedronGeometry(0.29, 5);
+centerGeo.scale(1, 0.82, 1);
+const centerDiamond = new THREE.Mesh(centerGeo, diamondMat);
+centerDiamond.position.y = 0.52;
+centerDiamond.castShadow = true;
+centerDiamond.material = diamondMat.clone();
+centerDiamond.material.flatShading = true;
+ring.add(centerDiamond);
+
+// Halo diamonds
+const smallGeo = new THREE.IcosahedronGeometry(0.041, 3);
+const haloMat = diamondMat.clone();
+haloMat.thickness = 0.15;
+haloMat.flatShading = true;
+const haloCount = 16;
+const halo = new THREE.InstancedMesh(smallGeo, haloMat, haloCount);
+const dummy = new THREE.Object3D();
+for(let i=0;i<haloCount;i++){
+  const a = i / haloCount * Math.PI*2;
+  const r = 0.335;
+  dummy.position.set(Math.cos(a)*r, 0.285, Math.sin(a)*r);
+  dummy.rotation.y = -a;
+  dummy.rotation.x = Math.PI/2 - 0.15;
+  dummy.updateMatrix();
+  halo.setMatrixAt(i, dummy.matrix);
+}
+halo.instanceMatrix.needsUpdate = true;
+halo.castShadow = true;
+ring.add(halo);
+
+// Halo setting metal
+const haloRing = new THREE.Mesh(
+  new THREE.TorusGeometry(0.335, 0.018, 16, 64),
+  platinum
+);
+haloRing.rotation.x = Math.PI/2;
+haloRing.position.y = 0.285;
+ring.add(haloRing);
+
+// Pave diamonds on shank
+const paveGeo = new THREE.IcosahedronGeometry(0.022, 2);
+const paveMat = diamondMat.clone();
+paveMat.thickness = 0.08;
+paveMat.flatShading = true;
+const paveCount = 72;
+const pave = new THREE.InstancedMesh(paveGeo, paveMat, paveCount);
+let idx = 0;
+for(let side=-1; side<=1; side+=2){
+  for(let i=0; i<paveCount/2; i++){
+    const t = (i/(paveCount/2 -1) - 0.5) * 1.35; // about 155 degrees
+    const ang = side * Math.PI/2 + t;
+    const r = bandRadius;
+    dummy.position.set(Math.cos(ang)*r, bandTube*0.98, Math.sin(ang)*r);
+    dummy.lookAt(0, dummy.position.y*2, 0);
+    dummy.rotateX(Math.PI/2);
+    dummy.updateMatrix();
+    pave.setMatrixAt(idx++, dummy.matrix);
+  }
+}
+pave.instanceMatrix.needsUpdate = true;
+ring.add(pave);
+
+// Sparkle points
+const sparklePos = new Float32Array(40*3);
+for(let i=0;i<40;i++){
+  const a = Math.random()*Math.PI*2;
+  const r = 0.2 + Math.random()*0.18;
+  sparklePos[i*3] = Math.cos(a)*r;
+  sparklePos[i*3+1] = 0.28 + Math.random()*0.28;
+  sparklePos[i*3+2] = Math.sin(a)*r;
+}
+const sparkGeo = new THREE.BufferGeometry();
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparklePos,3));
+const sparkMat = new THREE.PointsMaterial({
+  color:0xffffff, size:0.015, sizeAttenuation:true,
+  transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false
+});
+const sparkles = new THREE.Points(sparkGeo, sparkMat);
+ring.add(sparkles);
+
+// Moving light for brilliance
+const sparkLight = new THREE.PointLight(0xffffff, 2.5, 5, 2);
+sparkLight.position.set(1.5,1.8,1.2);
+scene.add(sparkLight);
+
+// Postprocessing
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.75, 0.85);
+bloom.threshold = 0.12;
+bloom.strength = 0.38;
+bloom.radius = 0.6;
+composer.addPass(bloom);
+
+// Animate
+let t = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  t += 0.016;
+  
+  controls.update();
+  
+  // gentle float
+  ring.position.y = Math.sin(t*0.6)*0.015;
+  ring.rotation.y += 0.0015;
+  
+  // diamond fire rotation
+  centerDiamond.rotation.y += 0.008;
+  halo.rotation.y -= 0.002;
+  
+  // moving sparkle light
+  sparkLight.position.x = Math.cos(t*0.7)*1.8;
+  sparkLight.position.z = Math.sin(t*0.9)*1.6;
+  sparkLight.position.y = 1.4 + Math.sin(t*1.2)*0.3;
+  sparkLight.intensity = 2.0 + Math.sin(t*3)*0.5;
+  
+  // flicker sparkles
+  sparkMat.opacity = 0.6 + Math.sin(t*5)*0.3;
+  
+  // slight camera breathing for macro feel
+  camera.position.y = 0.65 + Math.sin(t*0.4)*0.02;
+  
+  composer.render();
+}
+animate();
+
+window.addEventListener('resize', ()=>{
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w,h);
+  composer.setSize(w,h);
+});
+</script>
+</body>
+</html>

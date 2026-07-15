@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dataset Viewer</title>
+<style>
+  :root{--bg:#0e1116;--panel:#161b22;--panel-2:#1c232c;--border:#2a323d;
+        --text:#e6edf3;--muted:#8b98a5;--accent:#4aa8ff;--accent-2:#6ee7b7;--accent-3:#f0a04b;}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--text);line-height:1.5}
+  header.top{padding:12px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;
+             position:sticky;top:0;background:rgba(14,17,22,.95);backdrop-filter:blur(8px);z-index:20}
+  header.top h1{margin:0;font-size:14px;font-weight:600;white-space:nowrap}
+  .tabs{display:flex;gap:6px}
+  .tab{width:32px;height:32px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;
+       border:1px solid var(--border);background:var(--panel-2);color:var(--muted);transition:all .15s}
+  .tab:hover{border-color:var(--accent);color:var(--text)}
+  .tab.active{background:var(--accent);border-color:var(--accent);color:#0b1220}
+  .legend{margin-left:auto;display:flex;gap:14px;font-size:11px;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .legend i{width:8px;height:8px;border-radius:50%;display:block}
+  main{padding:12px 22px 28px;max-width:1180px;margin:0 auto}
+  .panel{display:none;flex-direction:column;gap:12px}
+  .panel.active{display:flex}
+  .prompt-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;
+              position:sticky;top:57px;z-index:15}
+  .prompt-head{display:flex;align-items:center;gap:12px;padding:9px 13px;border-bottom:1px solid var(--border)}
+  .label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2)}
+  .id{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--muted);
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .expand{background:var(--panel-2);border:1px solid var(--border);color:var(--accent);
+          font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;cursor:pointer}
+  .expand:hover{border-color:var(--accent)}
+  .prompt{margin:0;padding:10px 13px;font-family:inherit;font-size:12.5px;white-space:pre-wrap;
+          word-break:break-word;max-height:54px;overflow:hidden}
+  .prompt.open{max-height:32vh;overflow:auto}
+  .grid{display:flex;flex-direction:column;gap:12px}
+  .stack{display:contents}
+  .pane{display:flex;flex-direction:column;min-width:0;height:68vh;min-height:400px;
+        background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .pane.tall{height:68vh}
+  .pane-head{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:8px 11px;font-size:12px;
+             font-weight:600;border-bottom:1px solid var(--border);background:var(--panel-2)}
+  .sub{font-weight:400;font-size:10px;color:var(--muted);border:1px solid var(--border);
+       border-radius:4px;padding:0 5px}
+  .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .dot.orig{background:var(--accent)} .dot.fin{background:var(--accent-2)} .dot.prim{background:var(--accent-3)}
+  .max{margin-left:auto;background:none;border:1px solid var(--border);color:var(--muted);
+       border-radius:5px;font-size:11px;line-height:1;padding:3px 6px;cursor:pointer}
+  .max:hover{color:var(--text);border-color:var(--accent)}
+  .open{color:var(--muted);text-decoration:none;font-size:12px;padding:2px 4px}
+  .open:hover{color:var(--accent)}
+  iframe{flex:1 1 auto;width:100%;border:0;background:#000;min-height:0}
+  .pane.empty .none{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+       gap:6px;color:var(--muted);font-size:12px;text-align:center;padding:12px}
+  .pane.empty .none span{font-size:11px;color:#5d6874}
+  body.zoom{overflow:hidden}
+  body.zoom .pane:not(.zoomed){display:none}
+  body.zoom .prompt-box{display:none}
+  body.zoom .pane.zoomed{position:fixed;inset:57px 0 0 0;height:auto;border-radius:0;z-index:30}
+  @media(max-width:980px){.pane,.pane.tall{height:56vh;min-height:320px}}
+</style>
+</head>
+<body>
+  <header class="top">
+    <h1>Dataset Viewer</h1>
+    <div class="tabs">
+      <button class="tab active" data-n="1">1</button>
+      <button class="tab" data-n="3">3</button>
+      <button class="tab" data-n="4">4</button>
+      <button class="tab" data-n="5">5</button>
+    </div>
+    <div class="legend">
+      <span><i class="dot orig"></i>Original</span>
+      <span><i class="dot fin"></i>Redesign (assets)</span>
+      <span><i class="dot prim"></i>Primitive redesign</span>
+    </div>
+  </header>
+  <main>
+    <section class="panel active" data-n="1">
+      <div class="prompt-box">
+        <div class="prompt-head">
+          <span class="label">Prompt</span>
+          <span class="id">8b24ec72-03bf-41d3-af62-ce441ca398c5</span>
+          <button class="expand" aria-expanded="false">Expand</button>
+        </div>
+        <pre class="prompt">A luxurious 3D render of a diamond engagement ring featuring a large round brilliant-cut center stone held by four prongs, surrounded by a delicate halo of smaller diamonds. The band is slim and elegant with pavé-set diamonds along the shank, crafted in polished white gold or platinum. The ring has a slightly elevated basket setting with intricate detailing beneath the center stone. Ultra-realistic reflections, high brilliance and sparkle, studio lighting with soft shadows, clean white background, 8K resolution, photorealistic, macro lens, depth of field, jewelry advertisement style.</pre>
+      </div>
+      <div class="grid">
+        <div class="pane tall" data-label="Original">
+          <div class="pane-head"><span class="dot orig"></span>Original
+            <button class="max" title="Maximize">⤢</button>
+            <a class="open" href="apps/original_1.html" target="_blank" rel="noopener">↗</a></div>
+          <iframe data-src="apps/original_1.html" loading="lazy"></iframe>
+        </div>
+        <div class="stack">
+          <div class="pane" data-label="Redesign (assets)">
+            <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
+              <button class="max" title="Maximize">⤢</button>
+              <a class="open" href="apps/final_1/index.html" target="_blank" rel="noopener">↗</a></div>
+            <iframe data-src="apps/final_1/index.html" loading="lazy"></iframe>
+          </div>
+          <div class="pane" data-label="Primitive redesign">
+            <div class="pane-head"><span class="dot prim"></span>Primitive redesign
+              <button class="max" title="Maximize">⤢</button>
+              <a class="open" href="apps/prim_1/index.html" target="_blank" rel="noopener">↗</a></div>
+            <iframe data-src="apps/prim_1/index.html" loading="lazy"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="panel" data-n="3">
+      <div class="prompt-box">
+        <div class="prompt-head">
+          <span class="label">Prompt</span>
+          <span class="id">30b7f6a0-c2a9-4cd7-846f-1f09b72f08e4</span>
+          <button class="expand" aria-expanded="false">Expand</button>
+        </div>
+        <pre class="prompt">Ultra detailed 3D cartoon horror scene, night village environment, old stone well in center, moonlight, blue tone lighting, light fog, cinematic atmosphere, 
+main character: 18 year old boy, short black hair, blue shirt, black pants, holding flashlight, scared expression, standing near old well,
+action: boy slowly walking toward well and leaning forward to listen,
+camera angle: medium wide shot, slightly low angle, cinematic framing,
+lighting: moonlight from top, soft shadows, volumetric fog,
+style: Pixar style 3D cartoon, smooth textures, not realistic, high quality render, depth of field, suspense mood. Generator image in 9:16 aspect ratio</pre>
+      </div>
+      <div class="grid">
+        <div class="pane tall" data-label="Original">
+          <div class="pane-head"><span class="dot orig"></span>Original
+            <button class="max" title="Maximize">⤢</button>
+            <a class="open" href="apps/original_3.html" target="_blank" rel="noopener">↗</a></div>
+          <iframe data-src="apps/original_3.html" loading="lazy"></iframe>
+        </div>
+        <div class="stack">
+          <div class="pane" data-label="Redesign (assets)">
+            <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
+              <button class="max" title="Maximize">⤢</button>
+              <a class="open" href="apps/final_3/index.html" target="_blank" rel="noopener">↗</a></div>
+            <iframe data-src="apps/final_3/index.html" loading="lazy"></iframe>
+          </div>
+          <div class="pane" data-label="Primitive redesign">
+            <div class="pane-head"><span class="dot prim"></span>Primitive redesign
+              <button class="max" title="Maximize">⤢</button>
+              <a class="open" href="apps/prim_3/index.html" target="_blank" rel="noopener">↗</a></div>
+            <iframe data-src="apps/prim_3/index.html" loading="lazy"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="panel" data-n="4">
+      <div class="prompt-box">
+        <div class="prompt-head">
+          <span class="label">Prompt</span>
+          <span class="id">c4eafffc-33a5-4a7c-8e45-6a5d401fca9b</span>
+          <button class="expand" aria-expanded="false">Expand</button>
+        </div>
+        <pre class="prompt">A robot with closed loop full cycle walking animation.</pre>
+      </div>
+      <div class="grid">
+        <div class="pane tall" data-label="Original">
+          <div class="pane-head"><span class="dot orig"></span>Original
+            <button class="max" title="Maximize">⤢</button>
+            <a class="open" href="apps/original_4.html" target="_blank" rel="noopener">↗</a></div>
+          <iframe data-src="apps/original_4.html" loading="lazy"></iframe>
+        </div>
+        <div class="stack">
+          <div class="pane" data-label="Redesign (assets)">
+            <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
+              <button class="max" title="Maximize">⤢</button>
+              <a class="open" href="apps/final_4/index.html" target="_blank" rel="noopener">↗</a></div>
+            <iframe data-src="apps/final_4/index.html" loading="lazy"></iframe>
+          </div>
+          <div class="pane" data-label="Primitive redesign">
+            <div class="pane-head"><span class="dot prim"></span>Primitive redesign
+              <button class="max" title="Maximize">⤢</button>
+              <a class="open" href="apps/prim_4/index.html" target="_blank" rel="noopener">↗</a></div>
+            <iframe data-src="apps/prim_4/index.html" loading="lazy"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="panel" data-n="5">
+      <div class="prompt-box">
+        <div class="prompt-head">
+          <span class="label">Prompt</span>
+          <span class="id">53350eeb-dc89-449e-975d-2cc90cd48614</span>
+          <button class="expand" aria-expanded="false">Expand</button>
+        </div>
+        <pre class="prompt">A 3D model of a cute fluffy cat standing upright on two legs in a heroic pose. The cat is wearing a detailed Captain America superhero suit with a blue helmet with wings, scale armor texture on the torso, and red boots. The cat is holding a circular Vibranium shield with a star emblem in its paw. High quality, clean topology, 4k texture, PBR material, stylized character design, studio lighting, white background.</pre>
+      </div>
+      <div class="grid">
+        <div class="pane tall" data-label="Original">
+          <div class="pane-head"><span class="dot orig"></span>Original
+            <button class="max" title="Maximize">⤢</button>
+            <a class="open" href="apps/original_5.html" target="_blank" rel="noopener">↗</a></div>
+          <iframe data-src="apps/original_5.html" loading="lazy"></iframe>
+        </div>
+        <div class="stack">
+          <div class="pane" data-label="Redesign (assets)">
+            <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
+              <button class="max" title="Maximize">⤢</button>
+              <a class="open" href="apps/final_5/index.html" target="_blank" rel="noopener">↗</a></div>
+            <iframe data-src="apps/final_5/index.html" loading="lazy"></iframe>
+          </div>
+          <div class="pane" data-label="Primitive redesign">
+            <div class="pane-head"><span class="dot prim"></span>Primitive redesign
+              <button class="max" title="Maximize">⤢</button>
+              <a class="open" href="apps/prim_5/index.html" target="_blank" rel="noopener">↗</a></div>
+            <iframe data-src="apps/prim_5/index.html" loading="lazy"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+<script>
+  function load(p){p.querySelectorAll('iframe[data-src]').forEach(f=>{f.src=f.dataset.src;f.removeAttribute('data-src');});}
+  document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
+    unzoom();
+    const n=tab.dataset.n;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t===tab));
+    document.querySelectorAll('.panel').forEach(p=>{
+      const on=p.dataset.n===n; p.classList.toggle('active',on); if(on) load(p);
+    });
+    window.scrollTo({top:0,behavior:'smooth'});
+  }));
+  document.querySelectorAll('.expand').forEach(b=>b.addEventListener('click',()=>{
+    const pre=b.closest('.prompt-box').querySelector('.prompt');
+    const open=pre.classList.toggle('open');
+    b.textContent=open?'Collapse':'Expand'; b.setAttribute('aria-expanded',open);
+  }));
+  function unzoom(){
+    document.body.classList.remove('zoom');
+    document.querySelectorAll('.pane.zoomed').forEach(p=>p.classList.remove('zoomed'));
+    document.querySelectorAll('.max').forEach(b=>b.textContent='⤢');
+  }
+  document.querySelectorAll('.max').forEach(btn=>btn.addEventListener('click',()=>{
+    const pane=btn.closest('.pane');
+    const on=pane.classList.contains('zoomed');
+    unzoom();
+    if(!on){ pane.classList.add('zoomed'); document.body.classList.add('zoom'); btn.textContent='⤡'; }
+  }));
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') unzoom(); });
+  load(document.querySelector('.panel.active'));
+</script>
+</body>
+</html>

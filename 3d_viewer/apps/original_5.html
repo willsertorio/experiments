@@ -1,0 +1,322 @@
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Captain Meowmerica - 3D Hero Cat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif}
+  canvas{display:block}
+  #info{position:absolute;top:16px;left:16px;background:rgba(255,255,255,.88);backdrop-filter:blur(10px);padding:12px 16px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.08);pointer-events:none}
+  #info h1{margin:0 0 4px;font-size:18px;font-weight:700;letter-spacing:.2px;color:#111}
+  #info p{margin:0;font-size:13px;color:#444;line-height:1.4}
+</style>
+<script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="info"><h1>Captain Meowmerica</h1><p>Drag to orbit • Scroll to zoom • Click shield to throw</p></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(2.4, 1.7, 2.9);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.target.set(0, 1.1, 0);
+controls.minDistance = 1.6;
+controls.maxDistance = 6;
+controls.maxPolarAngle = Math.PI * 0.9;
+
+// Lights
+scene.add(new THREE.HemisphereLight(0xffffff, 0xf0f0f0, 0.7));
+const key = new THREE.DirectionalLight(0xffffff, 1.2);
+key.position.set(3.2, 5, 3.5);
+key.castShadow = true;
+key.shadow.mapSize.set(2048,2048);
+key.shadow.camera.left = -3; key.shadow.camera.right = 3;
+key.shadow.camera.top = 3; key.shadow.camera.bottom = -2;
+key.shadow.camera.near = 0.5; key.shadow.camera.far = 12;
+key.shadow.bias = -0.0004;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xfff7ed, 0.4);
+fill.position.set(-4, 2, -2);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffffff, 0.5);
+rim.position.set(-1, 3, -4);
+scene.add(rim);
+
+// Floor
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(30,30), new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.92, metalness:0}));
+floor.rotation.x = -Math.PI/2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const shadowBlob = new THREE.Mesh(new THREE.CircleGeometry(0.7, 64), new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:0.12}));
+shadowBlob.rotation.x = -Math.PI/2;
+shadowBlob.position.y = 0.002;
+scene.add(shadowBlob);
+
+// Materials
+const fur = new THREE.MeshPhysicalMaterial({color:0xffd8a8, roughness:0.85, sheen:1, sheenRoughness:0.35, sheenColor:0xfff2df, clearcoat:0.1});
+const whiteFur = new THREE.MeshPhysicalMaterial({color:0xfffaf3, roughness:0.85, sheen:1, sheenRoughness:0.3, sheenColor:0xffffff});
+const suitBlue = new THREE.MeshStandardMaterial({color:0x1e3a8a, roughness:0.38, metalness:0.15});
+const suitRed = new THREE.MeshStandardMaterial({color:0xdc2626, roughness:0.42, metalness:0.1});
+const suitWhite = new THREE.MeshStandardMaterial({color:0xf9fafb, roughness:0.4, metalness:0.05});
+const nosePink = new THREE.MeshStandardMaterial({color:0xff9aab, roughness:0.5});
+const eyeBlack = new THREE.MeshStandardMaterial({color:0x0a0a0a, roughness:0.2});
+const black = new THREE.MeshStandardMaterial({color:0x111111, roughness:0.6});
+
+// scale armor normal
+function makeScaleNormal(){
+  const s=512; const c=document.createElement('canvas'); c.width=c.height=s; const ctx=c.getContext('2d');
+  ctx.fillStyle='#8080ff'; ctx.fillRect(0,0,s,s);
+  for(let y=0;y<s;y+=26){
+    for(let x=0;x<s;x+=30){
+      const ox=(y/26|0)%2?15:0;
+      const gx=ctx.createRadialGradient(x+ox,y,2,x+ox,y+2,16);
+      gx.addColorStop(0,'#9b9bff'); gx.addColorStop(0.7,'#8080ff'); gx.addColorStop(1,'#6b6bdf');
+      ctx.fillStyle=gx; ctx.beginPath(); ctx.arc(x+ox,y,14,0,Math.PI*2); ctx.fill();
+    }
+  }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(4,2.5); t.anisotropy=4;
+  return t;
+}
+suitBlue.normalMap = makeScaleNormal();
+suitBlue.normalScale = new THREE.Vector2(0.45,0.45);
+
+// Cat group
+const cat = new THREE.Group();
+cat.position.y = 0;
+scene.add(cat);
+
+// Torso
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.38,0.58,16,32), suitBlue);
+torso.position.y = 1.07;
+torso.castShadow = true;
+cat.add(torso);
+
+// belly white
+const belly = new THREE.Mesh(new THREE.SphereGeometry(0.27,32,32), whiteFur);
+belly.scale.set(1,1.15,0.55);
+belly.position.set(0,0.96,0.26);
+belly.castShadow=true;
+cat.add(belly);
+
+// abdomen stripes
+[0.82,0.92,1.02].forEach((y,i)=>{
+  const mat = i%2===1 ? suitWhite : suitRed;
+  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.395,0.395,0.085,48), mat);
+  stripe.position.y = y;
+  stripe.castShadow=true;
+  cat.add(stripe);
+});
+
+// chest star
+function starShape(o=0.12,i=0.05){
+  const s=new THREE.Shape();
+  for(let j=0;j<10;j++){const r=j%2?i:o; const a=Math.PI*2*j/10 - Math.PI/2; const x=Math.cos(a)*r, y=Math.sin(a)*r; j? s.lineTo(x,y):s.moveTo(x,y);} s.closePath(); return s;
+}
+const star = new THREE.Mesh(new THREE.ExtrudeGeometry(starShape(),{depth:0.018,bevelEnabled:false}), suitWhite);
+star.position.set(0,1.26,0.385);
+star.rotation.x = 0;
+star.castShadow=true;
+cat.add(star);
+
+// shoulders trim
+[-1,1].forEach(side=>{
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15,0.02,12,32), suitWhite);
+  ring.position.set(side*0.38,1.35,0);
+  ring.rotation.y = Math.PI/2;
+  ring.rotation.z = side*0.2;
+  cat.add(ring);
+});
+
+// Legs
+const leftLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.135,0.28,12,20), suitBlue);
+leftLeg.position.set(-0.165,0.68,0.01);
+leftLeg.castShadow=true; cat.add(leftLeg);
+const rightLeg = leftLeg.clone(); rightLeg.position.x = 0.165; cat.add(rightLeg);
+
+const leftBoot = new THREE.Mesh(new THREE.CylinderGeometry(0.148,0.185,0.34,32), suitRed);
+leftBoot.position.set(-0.165,0.33,0.035); leftBoot.castShadow=true; cat.add(leftBoot);
+const rightBoot=leftBoot.clone(); rightBoot.position.x=0.165; cat.add(rightBoot);
+
+// Boots shine
+[leftBoot,rightBoot].forEach(b=>{ const cap=new THREE.Mesh(new THREE.SphereGeometry(0.148,24,16,0,Math.PI*2,0,Math.PI/2), suitRed); cap.position.y=0.17; b.add(cap); });
+
+// Arms
+const leftUpper = new THREE.Mesh(new THREE.CapsuleGeometry(0.096,0.24,10,16), suitBlue);
+leftUpper.position.set(-0.39,1.22,0.02); leftUpper.rotation.z=0.18; leftUpper.castShadow=true; cat.add(leftUpper);
+const leftFore = new THREE.Mesh(new THREE.CapsuleGeometry(0.09,0.22,10,16), suitBlue);
+leftFore.position.set(-0.33,1.04,0.12); leftFore.rotation.set(-0.3,0,0.65); leftFore.castShadow=true; cat.add(leftFore);
+const leftGlove = new THREE.Mesh(new THREE.SphereGeometry(0.105,20,20), suitRed);
+leftGlove.position.set(-0.26,0.98,0.20); leftGlove.castShadow=true; cat.add(leftGlove);
+
+const rightUpper = new THREE.Mesh(new THREE.CapsuleGeometry(0.1,0.25,10,16), suitBlue);
+rightUpper.position.set(0.395,1.24,0.06); rightUpper.rotation.set(0.25,0,-0.22); rightUpper.castShadow=true; cat.add(rightUpper);
+const rightFore = new THREE.Mesh(new THREE.CapsuleGeometry(0.095,0.24,10,16), suitBlue);
+rightFore.position.set(0.475,1.16,0.27); rightFore.rotation.set(0.75,0,-0.35); rightFore.castShadow=true; cat.add(rightFore);
+const rightPaw = new THREE.Mesh(new THREE.SphereGeometry(0.095,20,20), fur);
+rightPaw.position.set(0.46,1.10,0.43); rightPaw.castShadow=true; cat.add(rightPaw);
+
+// Head
+const head = new THREE.Group(); head.position.set(0,1.7,0); cat.add(head);
+const headBase = new THREE.Mesh(new THREE.SphereGeometry(0.385,40,40), fur); headBase.castShadow=true; head.add(headBase);
+const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.185,32,28), whiteFur); muzzle.position.set(0,-0.065,0.32); muzzle.scale.set(1,0.85,0.92); head.add(muzzle);
+const nose = new THREE.Mesh(new THREE.SphereGeometry(0.041,20,20), nosePink); nose.position.set(0,0,0.5); head.add(nose);
+[-1,1].forEach(s=>{
+  const eyeW = new THREE.Mesh(new THREE.SphereGeometry(0.092,28,28), new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.15, metalness:0})); eyeW.position.set(s*0.145,0.09,0.315); head.add(eyeW);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.047,24,24), eyeBlack); pupil.position.set(s*0.145,0.088,0.395); head.add(pupil);
+  const glint = new THREE.Mesh(new THREE.SphereGeometry(0.015,12,12), new THREE.MeshBasicMaterial({color:0xffffff})); glint.position.set(s*0.16,0.11,0.425); head.add(glint);
+});
+[-1,1].forEach(s=>{
+  const ear = new THREE.Mesh(new THREE.ConeGeometry(0.12,0.19,20), fur); ear.position.set(s*0.22,0.34,0.02); ear.rotation.z = s*-0.15; ear.rotation.x = -0.1; ear.castShadow=true; head.add(ear);
+  const inner = new THREE.Mesh(new THREE.ConeGeometry(0.065,0.11,16), nosePink); inner.position.set(s*0.22,0.35,0.05); inner.rotation.z = s*-0.15; inner.rotation.x=-0.1; head.add(inner);
+});
+// cheeks fluff
+[-1,1].forEach(s=>{ const ch=new THREE.Mesh(new THREE.SphereGeometry(0.11,20,20), whiteFur); ch.position.set(s*0.23,-0.07,0.24); ch.scale.set(1,0.9,0.8); head.add(ch); });
+
+// Helmet
+const helmet = new THREE.Group(); helmet.position.y=0.04; head.add(helmet);
+const dome = new THREE.Mesh(new THREE.SphereGeometry(0.408,40,40,0,Math.PI*2,0,Math.PI*0.63), suitBlue); dome.position.y=0.03; dome.castShadow=true; helmet.add(dome);
+const brow = new THREE.Mesh(new THREE.TorusGeometry(0.31,0.028,12,36,Math.PI*1.15), suitBlue); brow.position.set(0,0.05,0.24); brow.rotation.x=Math.PI/2.2; helmet.add(brow);
+// A emblem
+const aMat = suitWhite;
+const aGroup = new THREE.Group(); aGroup.position.set(0,0.12,0.395); aGroup.rotation.x=0.15; helmet.add(aGroup);
+const aBar1 = new THREE.Mesh(new THREE.BoxGeometry(0.022,0.14,0.022), aMat); aBar1.position.set(-0.045,-0.01,0); aBar1.rotation.z=0.28; aGroup.add(aBar1);
+const aBar2 = aBar1.clone(); aBar2.position.x=0.045; aBar2.rotation.z=-0.28; aGroup.add(aBar2);
+const aBar3 = new THREE.Mesh(new THREE.BoxGeometry(0.07,0.02,0.02), aMat); aBar3.position.y=-0.015; aGroup.add(aBar3);
+// wings
+function makeWing(){
+  const sh=new THREE.Shape(); sh.moveTo(0,0); sh.bezierCurveTo(0.04,0.03,0.09,0.04,0.16,0.015); sh.bezierCurveTo(0.12,0.025,0.11,0.05,0.09,0.055); sh.bezierCurveTo(0.07,0.07,0.045,0.06,0.03,0.045); sh.bezierCurveTo(0.015,0.03,0.005,0.015,0,0);
+  return new THREE.ExtrudeGeometry(sh,{depth:0.012,bevelEnabled:false});
+}
+const wingGeo=makeWing();
+const leftWing=new THREE.Mesh(wingGeo,suitWhite); leftWing.position.set(-0.405,0.09,0.02); leftWing.rotation.set(0,-0.2,0.1); helmet.add(leftWing);
+const rightWing=new THREE.Mesh(wingGeo,suitWhite); rightWing.position.set(0.405,0.09,0.02); rightWing.rotation.set(0,Math.PI+0.2,-0.1); helmet.add(rightWing);
+// chin strap
+const strap=new THREE.Mesh(new THREE.TorusGeometry(0.23,0.018,10,24,Math.PI*1.1), suitBlue); strap.position.set(0,-0.18,0.12); strap.rotation.x=Math.PI/1.9; helmet.add(strap);
+
+// Tail
+const tailCurve=new THREE.CatmullRomCurve3([new THREE.Vector3(0,0.88,-0.18),new THREE.Vector3(-0.12,0.73,-0.36),new THREE.Vector3(-0.28,0.58,-0.48),new THREE.Vector3(-0.38,0.42,-0.36),new THREE.Vector3(-0.3,0.28,-0.18)]);
+const tail=new THREE.Mesh(new THREE.TubeGeometry(tailCurve,60,0.098,14,false), fur); tail.castShadow=true; cat.add(tail);
+const tailTip=new THREE.Mesh(new THREE.SphereGeometry(0.11,20,20), whiteFur); tailTip.position.copy(tailCurve.getPoint(1)); cat.add(tailTip);
+
+// Shield
+function shieldTexture(){
+  const s=1024, c=document.createElement('canvas'); c.width=c.height=s; const x=c.getContext('2d');
+  x.fillStyle='#ffffff'; x.fillRect(0,0,s,s); const cx=s/2;
+  [[0.48,'#b91c1c'],[0.38,'#ffffff'],[0.285,'#b91c1c'],[0.19,'#1e3a8a']].forEach(([r,col])=>{x.beginPath();x.arc(cx,cx,r*s,0,Math.PI*2);x.fillStyle=col;x.fill();});
+  x.save(); x.translate(cx,cx); x.fillStyle='#ffffff'; x.beginPath(); for(let i=0;i<10;i++){const rad=i%2?0.075*s:0.165*s; const a=Math.PI*2*i/10 - Math.PI/2; x.lineTo(Math.cos(a)*rad,Math.sin(a)*rad);} x.closePath(); x.fill(); x.restore();
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8; return t;
+}
+const shieldTex=shieldTexture();
+const shieldSideMat=new THREE.MeshStandardMaterial({color:0xcbd5e1, metalness:0.85, roughness:0.25});
+const shieldFrontMat=new THREE.MeshStandardMaterial({map:shieldTex, metalness:0.65, roughness:0.22});
+const shieldBackMat=new THREE.MeshStandardMaterial({color:0x7f1d1d, metalness:0.7, roughness:0.35});
+const shieldGeo=new THREE.CylinderGeometry(0.345,0.345,0.047,80);
+const shieldMesh=new THREE.Mesh(shieldGeo,[shieldSideMat,shieldFrontMat,shieldBackMat]); shieldMesh.rotation.x=Math.PI/2; shieldMesh.castShadow=true;
+const shieldGroup=new THREE.Group(); shieldGroup.add(shieldMesh);
+const boss=new THREE.Mesh(new THREE.SphereGeometry(0.036,24,24), new THREE.MeshStandardMaterial({color:0xe5e7eb, metalness:0.95, roughness:0.12})); boss.position.z=0.027; shieldGroup.add(boss);
+shieldGroup.position.set(0.515,1.12,0.485); shieldGroup.rotation.set(0.15,-0.2,0.1); cat.add(shieldGroup);
+const startShieldPos=shieldGroup.position.clone();
+const targetShieldPos=startShieldPos.clone().add(new THREE.Vector3(-0.05,0.18,1.35));
+
+// Fluffy points
+function addFluff(parent,r=0.39,count=450){
+  const g=new THREE.BufferGeometry(); const p=[];
+  for(let i=0;i<count;i++){const th=Math.random()*Math.PI*2; const ph=Math.acos(THREE.MathUtils.lerp(0.2,1,Math.random())); const rad=r+Math.random()*0.035; p.push(rad*Math.sin(ph)*Math.cos(th), rad*Math.cos(ph)*0.96, rad*Math.sin(ph)*Math.sin(th));}
+  g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));
+  const m=new THREE.PointsMaterial({color:0xfff4e0,size:0.027,transparent:true,opacity:0.88,depthWrite:false,sizeAttenuation:true});
+  parent.add(new THREE.Points(g,m));
+}
+addFluff(head,0.385,520);
+addFluff(headBase,0.28,180);
+
+// Heroic pose tilt
+cat.rotation.x = -0.035;
+cat.rotation.z = 0.01;
+
+// Interaction
+const ray=new THREE.Raycaster(); const mouse=new THREE.Vector2();
+let throwing=0, throwT=0;
+renderer.domElement.addEventListener('pointerdown',e=>{
+  mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(mouse,camera);
+  if(ray.intersectObject(shieldMesh,true).length && throwing===0){ throwing=1; throwT=0; }
+});
+renderer.domElement.addEventListener('pointermove',e=>{
+  mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(mouse,camera);
+  document.body.style.cursor = ray.intersectObject(shieldMesh,true).length ? 'pointer' : 'auto';
+});
+
+// Animate
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t=clock.getElapsedTime(); const dt=clock.getDelta();
+  controls.update();
+  // idle
+  cat.position.y = Math.sin(t*1.25)*0.011;
+  torso.scale.y = 1 + Math.sin(t*1.8)*0.009;
+  head.rotation.y = Math.sin(t*0.7)*0.08;
+  head.rotation.x = Math.sin(t*1.1)*0.018 + 0.02;
+  tail.rotation.y = Math.sin(t*0.9)*0.18;
+  tailTip.position.y += Math.sin(t*2)*0.0005;
+  leftWing.rotation.z = 0.1 + Math.sin(t*1.5)*0.02;
+  rightWing.rotation.z = -0.1 - Math.sin(t*1.5)*0.02;
+  shieldGroup.rotation.z = 0.1 + Math.sin(t*1.6)*0.04;
+  shadowBlob.scale.setScalar(1 + Math.sin(t*1.25)*0.04);
+  // throw animation
+  if(throwing===1){
+    throwT+=dt*1.9; const p=Math.min(throwT,1); const e=1-Math.pow(1-p,3);
+    shieldGroup.position.lerpVectors(startShieldPos, targetShieldPos, e);
+    shieldGroup.rotation.y = e*Math.PI*5;
+    if(p>=1){throwing=2; throwT=0;}
+  }else if(throwing===2){
+    throwT+=dt*2.2; const p=Math.min(throwT,1); const e=1-Math.pow(1-p,2);
+    shieldGroup.position.lerpVectors(targetShieldPos, startShieldPos, e);
+    shieldGroup.rotation.y = (1-e)*Math.PI*5;
+    if(p>=1){throwing=0; shieldGroup.rotation.y=0;}
+  }else{
+    shieldGroup.position.y = startShieldPos.y + Math.sin(t*2.2)*0.006;
+  }
+  renderer.render(scene,camera);
+}
+animate();
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>

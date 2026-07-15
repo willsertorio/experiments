@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  html,body{margin:0;height:100%;background:#0d2f5e;overflow:hidden;font-family:'Space Grotesk',sans-serif;}
+</style>
+</helmet>
+<div style="position:fixed;inset:0;background:#0d2f5e;">
+  <div ref="{{ mount }}" style="position:absolute;inset:0;"></div>
+
+  <div style="position:absolute;top:24px;left:24px;color:#fff;pointer-events:none;">
+    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#f5d800;opacity:.9;">Unit-01 · Locomotion</div>
+    <div style="font-size:30px;font-weight:700;line-height:1.05;margin-top:4px;text-shadow:0 2px 12px rgba(0,0,0,.4);">Robot Viewer</div>
+  </div>
+
+  <div style="position:absolute;top:24px;right:24px;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:rgba(255,255,255,.55);text-align:right;pointer-events:none;">
+    drag to orbit
+  </div>
+
+  <div style="position:absolute;left:50%;bottom:34px;transform:translateX(-50%);width:min(560px,88vw);background:rgba(10,28,54,.72);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:22px 26px 24px;box-shadow:0 18px 50px rgba(0,0,0,.45);">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-family:'Space Mono',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);">Gait</div>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="font-size:26px;font-weight:700;color:#f5d800;line-height:1;">{{ gaitLabel }}</span>
+        <span style="font-family:'Space Mono',monospace;font-size:12px;color:rgba(255,255,255,.5);">{{ speedText }}</span>
+      </div>
+    </div>
+    <input type="range" min="0" max="100" value="{{ gait }}" onInput="{{ onGait }}"
+      style="width:100%;-webkit-appearance:none;appearance:none;height:8px;border-radius:99px;background:linear-gradient(90deg,#e61e1e,#f5d800);outline:none;cursor:pointer;" />
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:rgba(255,255,255,.5);">
+      <span>STROLL</span><span>WALK</span><span>JOG</span><span>SPRINT</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { gait: 35 };
+
+  renderVals() {
+    const g = this.state.gait / 100;
+    let label = "Walk";
+    if (this.state.gait < 12) label = "Stroll";
+    else if (this.state.gait < 40) label = "Walk";
+    else if (this.state.gait < 72) label = "Jog";
+    else label = "Run";
+    const speed = (2 + g * 8).toFixed(1);
+    return {
+      gait: this.state.gait,
+      gaitLabel: label,
+      speedText: speed + " m/s",
+      mount: (el) => { this._el = el; this.tryInit(); },
+      onGait: (e) => this.setState({ gait: +e.target.value }),
+    };
+  }
+
+  componentDidMount() { this.tryInit(); }
+
+  tryInit() {
+    if (this._started || !this._el) return;
+    if (!window.THREE) { setTimeout(() => this.tryInit(), 60); return; }
+    this._started = true;
+    this.init();
+  }
+
+  componentWillUnmount() {
+    this._stop = true;
+    if (this._renderer) this._renderer.dispose();
+  }
+
+  init() {
+    const THREE = window.THREE;
+    const el = this._el;
+    const W = el.clientWidth, H = el.clientHeight;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d2f5e);
+    scene.fog = new THREE.Fog(0x0d2f5e, 14, 34);
+
+    const camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 100);
+    this.cam = { az: 0.5, pol: 1.12, r: 15, target: new THREE.Vector3(0, 2.15, 0) };
+    this.applyCam(camera);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(W, H);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    el.appendChild(renderer.domElement);
+    this._renderer = renderer;
+
+    // lights
+    scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x22344f, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 1.05);
+    key.position.set(6, 11, 5);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    const d = 8;
+    key.shadow.camera.left = -d; key.shadow.camera.right = d;
+    key.shadow.camera.top = d; key.shadow.camera.bottom = -d;
+    key.shadow.camera.near = 1; key.shadow.camera.far = 40;
+    key.shadow.bias = -0.0004;
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x8fb4ff, 0.35);
+    fill.position.set(-7, 4, -4);
+    scene.add(fill);
+
+    // ground
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(120, 120),
+      new THREE.MeshStandardMaterial({ color: 0xe9edf2, roughness: 0.95, metalness: 0 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    const grid = new THREE.GridHelper(120, 120, 0xa9b6c6, 0xc4cdd8);
+    grid.position.y = 0.01;
+    grid.material.transparent = true; grid.material.opacity = 0.55;
+    scene.add(grid);
+    this.grid = grid;
+    this.gridStep = 120 / 120; // one cell = 1 unit
+    this.scroll = 0;
+
+    // robot
+    const robot = this.buildRobot(THREE);
+    scene.add(robot);
+    this.robot = robot;
+
+    // orbit interaction
+    this.bindOrbit(el, camera);
+
+    // resize
+    const onResize = () => {
+      const w = el.clientWidth, h = el.clientHeight;
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    window.addEventListener("resize", onResize);
+    this._onResize = onResize;
+
+    const clock = new THREE.Clock();
+    this.phase = 0;
+    const loop = () => {
+      if (this._stop) return;
+      requestAnimationFrame(loop);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      this.animate(dt);
+      this.applyCam(camera);
+      renderer.render(scene, camera);
+    };
+    loop();
+  }
+
+  mat(THREE, color, opts = {}) {
+    return new THREE.MeshStandardMaterial({ color, roughness: opts.r ?? 0.45, metalness: opts.m ?? 0.05 });
+  }
+
+  box(THREE, w, h, d, color, r) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), this.mat(THREE, color, r));
+    m.castShadow = true; m.receiveShadow = true; return m;
+  }
+  cyl(THREE, rt, rb, h, color, seg = 24) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), this.mat(THREE, color));
+    m.castShadow = true; m.receiveShadow = true; return m;
+  }
+
+  buildRobot(THREE) {
+    const C = { blue: 0x2b32c9, red: 0xe61e1e, yellow: 0xf5d800, gray: 0x9ba0a6, dark: 0x4a4d52 };
+    const robot = new THREE.Group();
+
+    // ---- torso ----
+    const body = new THREE.Group();
+    body.position.y = 2.55;
+    robot.add(body);
+    this.body = body;
+
+    const chest = this.box(THREE, 1.7, 1.5, 1.1, C.red);
+    body.add(chest);
+
+    // pelvis
+    const pelvis = this.box(THREE, 1.35, 0.75, 0.95, C.red);
+    pelvis.position.y = -1.15;
+    body.add(pelvis);
+    const belt = this.box(THREE, 1.38, 0.16, 0.98, C.blue);
+    belt.position.y = -0.78;
+    body.add(belt);
+
+    // ---- head ----
+    const head = this.cyl(THREE, 0.5, 0.85, 0.95, C.blue, 4);
+    head.rotation.y = Math.PI / 4;
+    head.position.y = 1.35;
+    body.add(head);
+    const eyeGeo = new THREE.SphereGeometry(0.14, 20, 20);
+    const eyeMat = this.mat(THREE, C.yellow, { r: 0.25 });
+    [-0.26, 0.26].forEach((x) => {
+      const eye = new THREE.Mesh(eyeGeo, eyeMat);
+      eye.castShadow = true;
+      eye.position.set(x, 1.42, 0.5);
+      body.add(eye);
+    });
+
+    // ---- arms ----
+    this.armL = this.buildArm(THREE, C, 1);
+    this.armR = this.buildArm(THREE, C, -1);
+    this.armL.group.position.set(0.95, 0.55, 0);
+    this.armR.group.position.set(-0.95, 0.55, 0);
+    body.add(this.armL.group);
+    body.add(this.armR.group);
+
+    // ---- legs ----
+    this.legL = this.buildLeg(THREE, C, 1);
+    this.legR = this.buildLeg(THREE, C, -1);
+    this.legL.group.position.set(0.42, -1.35, 0);
+    this.legR.group.position.set(-0.42, -1.35, 0);
+    body.add(this.legL.group);
+    body.add(this.legR.group);
+
+    return robot;
+  }
+
+  buildArm(THREE, C, side) {
+    const group = new THREE.Group(); // shoulder pivot
+    // shoulder cylinder (yellow, horizontal)
+    const sh = this.cyl(THREE, 0.34, 0.34, 0.55, C.yellow);
+    sh.rotation.z = Math.PI / 2;
+    sh.position.x = side * 0.18;
+    group.add(sh);
+    // upper arm (gray)
+    const upper = this.cyl(THREE, 0.2, 0.2, 0.85, C.gray);
+    upper.position.y = -0.55;
+    group.add(upper);
+    // elbow group
+    const elbow = new THREE.Group();
+    elbow.position.y = -1.0;
+    group.add(elbow);
+    const kn = this.cyl(THREE, 0.24, 0.24, 0.4, C.yellow);
+    kn.rotation.z = Math.PI / 2;
+    elbow.add(kn);
+    const fore = this.cyl(THREE, 0.19, 0.19, 0.8, C.yellow);
+    fore.position.y = -0.5;
+    elbow.add(fore);
+    const hand = this.box(THREE, 0.42, 0.42, 0.42, C.gray);
+    hand.position.y = -1.0;
+    elbow.add(hand);
+    return { group, elbow };
+  }
+
+  buildLeg(THREE, C, side) {
+    const group = new THREE.Group(); // hip pivot
+    const hip = this.cyl(THREE, 0.34, 0.34, 0.5, C.yellow);
+    hip.rotation.z = Math.PI / 2;
+    group.add(hip);
+    const thigh = this.cyl(THREE, 0.26, 0.26, 0.95, C.yellow);
+    thigh.position.y = -0.6;
+    group.add(thigh);
+    const knee = new THREE.Group();
+    knee.position.y = -1.1;
+    group.add(knee);
+    const kc = this.cyl(THREE, 0.28, 0.28, 0.44, C.gray);
+    kc.rotation.z = Math.PI / 2;
+    knee.add(kc);
+    const shin = this.cyl(THREE, 0.24, 0.24, 0.9, C.yellow);
+    shin.position.y = -0.6;
+    knee.add(shin);
+    // foot
+    const ankle = new THREE.Group();
+    ankle.position.y = -1.05;
+    knee.add(ankle);
+    const foot = this.box(THREE, 0.5, 0.34, 0.95, C.gray);
+    foot.position.set(0, -0.05, 0.22);
+    ankle.add(foot);
+    return { group, knee, ankle };
+  }
+
+  animate(dt) {
+    if (!this.robot) return;
+    const g = this.state.gait / 100;
+    const freq = 2.0 + g * 5.5;
+    this.phase += dt * freq;
+    const p = this.phase;
+
+    const legAmp = 0.45 + g * 0.55;
+    const kneeAmp = 0.55 + g * 1.15;
+    const armAmp = 0.35 + g * 0.9;
+    const elbowBend = 0.25 + g * 1.1;
+    const bounce = 0.05 + g * 0.32;
+    const lean = g * 0.34;
+
+    // ground scrolls toward the viewer, faster at higher gaits
+    if (this.grid) {
+      const groundSpeed = 1.5 + g * 9;
+      this.scroll = (this.scroll + dt * groundSpeed) % this.gridStep;
+      this.grid.position.z = -this.scroll;
+    }
+
+    const sinP = Math.sin(p);
+
+    // legs (opposite phase)
+    this.swingLeg(this.legL, p, legAmp, kneeAmp);
+    this.swingLeg(this.legR, p + Math.PI, legAmp, kneeAmp);
+
+    // arms swing opposite to same-side leg
+    this.swingArm(this.armL, p + Math.PI, armAmp, elbowBend);
+    this.swingArm(this.armR, p, armAmp, elbowBend);
+
+    // body bob + forward lean + slight side sway
+    const bob = Math.abs(Math.sin(p)) * bounce;
+    this.body.position.y = 3.72 + bob - g * 0.12;
+    this.body.rotation.x = lean;
+    this.body.rotation.z = Math.sin(p) * 0.04 * (1 + g);
+    this.body.rotation.y = Math.sin(p) * 0.05 * (1 + g);
+    // subtle vertical hop for the whole rig at speed
+    this.robot.position.y = Math.max(0, Math.sin(p * 2)) * bounce * 0.5 * g;
+  }
+
+  swingLeg(leg, p, amp, kneeAmp) {
+    const s = Math.sin(p);
+    leg.group.rotation.x = s * amp;
+    // knee bends most as the leg lifts / passes under (during forward swing)
+    const bend = Math.max(0, Math.sin(p - 0.7));
+    leg.knee.rotation.x = bend * kneeAmp;
+    // ankle counter-rotates a touch to keep foot flat-ish
+    leg.ankle.rotation.x = -s * amp * 0.4;
+  }
+
+  swingArm(arm, p, amp, elbowBend) {
+    arm.group.rotation.x = Math.sin(p) * amp;
+    const bend = elbowBend * (0.5 + 0.5 * Math.max(0, Math.sin(p + 1.0)));
+    arm.elbow.rotation.x = -bend;
+  }
+
+  applyCam(camera) {
+    const c = this.cam;
+    c.pol = Math.max(0.35, Math.min(1.5, c.pol));
+    const x = c.target.x + c.r * Math.sin(c.pol) * Math.sin(c.az);
+    const y = c.target.y + c.r * Math.cos(c.pol);
+    const z = c.target.z + c.r * Math.sin(c.pol) * Math.cos(c.az);
+    camera.position.set(x, y, z);
+    camera.lookAt(c.target);
+  }
+
+  bindOrbit(el, camera) {
+    let dragging = false, lx = 0, ly = 0;
+    const down = (e) => { dragging = true; const t = e.touches ? e.touches[0] : e; lx = t.clientX; ly = t.clientY; };
+    const move = (e) => {
+      if (!dragging) return;
+      const t = e.touches ? e.touches[0] : e;
+      this.cam.az -= (t.clientX - lx) * 0.008;
+      this.cam.pol -= (t.clientY - ly) * 0.006;
+      lx = t.clientX; ly = t.clientY;
+    };
+    const up = () => { dragging = false; };
+    el.addEventListener("mousedown", down);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    el.addEventListener("touchstart", down, { passive: true });
+    window.addEventListener("touchmove", move, { passive: true });
+    window.addEventListener("touchend", up);
+    el.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      this.cam.r = Math.max(5, Math.min(18, this.cam.r + e.deltaY * 0.01));
+    }, { passive: false });
+  }
+}
+</script>
+</body>
+</html>

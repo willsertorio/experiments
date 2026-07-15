@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#eceef1;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;}
+  a{color:#3a6ea5;} a:hover{color:#28527a;}
+  canvas{display:block;}
+</style>
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</helmet>
+<div style="position:fixed;inset:0;background:radial-gradient(120% 120% at 50% 18%, #f6f8fa 0%, #dfe3e7 62%, #cbd0d5 100%);">
+  <div ref="{{ setHost }}" style="position:absolute;inset:0;"></div>
+
+  <div style="position:absolute;top:22px;left:26px;pointer-events:none;user-select:none;">
+    <div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#8a9099;font-weight:600;">Jewelry Study · 01</div>
+    <div style="font-size:23px;letter-spacing:-0.01em;color:#3a4048;font-weight:600;margin-top:4px;">Cushion Halo Ring</div>
+    <div style="font-size:12.5px;color:#9aa0a8;margin-top:3px;">Cushion-cut center · 18-stone halo · pavé shank</div>
+  </div>
+
+  <div style="position:absolute;top:22px;right:22px;width:236px;background:rgba(255,255,255,0.72);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.9);border-radius:16px;box-shadow:0 8px 28px rgba(50,60,72,0.14);padding:16px 16px 18px;font-size:12px;color:#4a5058;">
+    <div style="font-size:10.5px;letter-spacing:0.2em;text-transform:uppercase;color:#9aa0a8;font-weight:700;margin-bottom:12px;">Configure</div>
+
+    <div style="font-size:11px;font-weight:600;color:#7a818a;margin-bottom:7px;">Finish</div>
+    <div style="display:flex;gap:6px;background:#e9ebee;border-radius:10px;padding:3px;margin-bottom:16px;">
+      <button onClick="{{ setClay }}" style="{{ clayBtnStyle }}">Clay</button>
+      <button onClick="{{ setPolished }}" style="{{ polishedBtnStyle }}">Polished</button>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;color:#7a818a;margin-bottom:9px;">Center stone</div>
+    <div style="display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:10px;">{{ gemSwatches }}</div>
+    <label style="display:flex;align-items:center;gap:9px;margin-bottom:16px;cursor:pointer;color:#8a9099;">
+      <input type="color" value="{{ gemColor }}" onInput="{{ onGemInput }}" style="width:30px;height:24px;border:none;background:none;padding:0;cursor:pointer;border-radius:6px;">
+      <span>Custom color</span>
+    </label>
+
+    <div style="font-size:11px;font-weight:600;color:#7a818a;margin-bottom:9px;">Metal</div>
+    <div style="display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:10px;">{{ metalSwatches }}</div>
+    <label style="display:flex;align-items:center;gap:9px;margin-bottom:16px;cursor:pointer;color:#8a9099;">
+      <input type="color" value="{{ metalColor }}" onInput="{{ onMetalInput }}" style="width:30px;height:24px;border:none;background:none;padding:0;cursor:pointer;border-radius:6px;">
+      <span>Custom color</span>
+    </label>
+
+    <div style="height:1px;background:rgba(120,130,140,0.14);margin:0 0 13px;"></div>
+
+    <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;cursor:pointer;">
+      <span style="color:#6a717a;">Auto-rotate</span>
+      <input type="checkbox" checked="{{ autoRotate }}" onChange="{{ toggleRotate }}" style="width:16px;height:16px;cursor:pointer;accent-color:#3a4048;">
+    </label>
+    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+      <span style="color:#6a717a;">Studio grid</span>
+      <input type="checkbox" checked="{{ showGrid }}" onChange="{{ toggleGrid }}" style="width:16px;height:16px;cursor:pointer;accent-color:#3a4048;">
+    </label>
+  </div>
+
+  <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:18px;align-items:center;font-size:12px;color:#8a9099;letter-spacing:0.02em;pointer-events:none;user-select:none;background:rgba(255,255,255,0.55);backdrop-filter:blur(6px);padding:8px 16px;border-radius:999px;box-shadow:0 1px 3px rgba(60,70,80,0.08);">
+    <span>Drag&nbsp;·&nbsp;orbit</span>
+    <span style="opacity:0.4;">|</span>
+    <span>Scroll&nbsp;·&nbsp;zoom</span>
+    <span style="opacity:0.4;">|</span>
+    <span>Right-drag&nbsp;·&nbsp;pan</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;materialMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Clay&quot;,&quot;Polished&quot;],&quot;default&quot;:&quot;Clay&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Render&quot;},&quot;autoRotate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Render&quot;},&quot;showGrid&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Render&quot;},&quot;metalColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#8afffd&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Materials&quot;},&quot;gemColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#474eff&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Materials&quot;}}">
+class Component extends DCLogic {
+  state = {};
+
+  _val(k, d) {
+    if (this.state && this.state[k] !== undefined) return this.state[k];
+    return this._p(k, d);
+  }
+  _set(k, v) { this.setState({ [k]: v }); }
+
+  renderVals() {
+    const mode = this._val('materialMode', 'Clay');
+    const autoRotate = this._val('autoRotate', true);
+    const showGrid = this._val('showGrid', true);
+    const metalColor = this._val('metalColor', '#bfc5cc');
+    const gemColor = this._val('gemColor', '#aac3e2');
+
+    const metalPresets = [
+      { name: 'Platinum', color: '#cfd4da' },
+      { name: 'White gold', color: '#e9e6da' },
+      { name: 'Yellow gold', color: '#e6c15a' },
+      { name: 'Rose gold', color: '#e0a891' }
+    ];
+    const gemPresets = [
+      { name: 'Diamond', color: '#dbe6f2' },
+      { name: 'Sapphire', color: '#2f5fd0' },
+      { name: 'Emerald', color: '#1f9e6b' },
+      { name: 'Ruby', color: '#d0263f' },
+      { name: 'Amethyst', color: '#8a5cd6' },
+      { name: 'Morganite', color: '#e7a6a0' }
+    ];
+    const swatchEls = (presets, current, key) => presets.map((p) => {
+      const active = current.toLowerCase() === p.color.toLowerCase();
+      return React.createElement('button', {
+        key: p.color,
+        title: p.name,
+        onClick: () => this._set(key, p.color),
+        style: {
+          width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', padding: 0,
+          background: p.color,
+          border: active ? '2px solid #3a4048' : '2px solid rgba(255,255,255,0.85)',
+          boxShadow: active ? '0 0 0 1.5px #3a4048, 0 1px 2px rgba(0,0,0,0.15)' : '0 1px 2px rgba(0,0,0,0.18)',
+          outline: 'none', transition: 'transform .12s', transform: active ? 'scale(1.08)' : 'scale(1)'
+        }
+      });
+    });
+
+    return {
+      setHost: (el) => { if (el && el !== this.host) { this.host = el; this._init(); } },
+      mode, autoRotate, showGrid, metalColor, gemColor,
+      isClay: mode === 'Clay', isPolished: mode === 'Polished',
+      clayBtnStyle: this._segStyle(mode === 'Clay'),
+      polishedBtnStyle: this._segStyle(mode === 'Polished'),
+      setClay: () => this._set('materialMode', 'Clay'),
+      setPolished: () => this._set('materialMode', 'Polished'),
+      toggleRotate: () => this._set('autoRotate', !autoRotate),
+      toggleGrid: () => this._set('showGrid', !showGrid),
+      onMetalInput: (e) => this._set('metalColor', e.target.value),
+      onGemInput: (e) => this._set('gemColor', e.target.value),
+      metalSwatches: swatchEls(metalPresets, metalColor, 'metalColor'),
+      gemSwatches: swatchEls(gemPresets, gemColor, 'gemColor')
+    };
+  }
+
+  _segStyle(active) {
+    return 'flex:1;border:none;cursor:pointer;padding:7px 0;border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;'
+      + (active
+        ? 'background:#ffffff;color:#3a4048;box-shadow:0 1px 3px rgba(50,60,72,0.18);'
+        : 'background:transparent;color:#8a9099;');
+  }
+
+  componentDidUpdate() { this._applyProps(); }
+
+  componentWillUnmount() {
+    cancelAnimationFrame(this._raf);
+    clearTimeout(this._t);
+    window.removeEventListener('resize', this._onResize);
+    if (this.renderer) this.renderer.dispose();
+  }
+
+  _p(k, d) { const v = this.props ? this.props[k] : undefined; return (v === undefined || v === null) ? d : v; }
+
+  _init() {
+    const THREE = window.THREE;
+    if (!this.host || !THREE || !THREE.OrbitControls) { this._t = setTimeout(() => this._init(), 60); return; }
+    if (this._built) return;
+    this._built = true;
+    this.THREE = THREE;
+
+    const host = this.host;
+    const W = host.clientWidth || window.innerWidth;
+    const H = host.clientHeight || window.innerHeight;
+
+    const scene = new THREE.Scene();
+    this.scene = scene;
+
+    const camera = new THREE.PerspectiveCamera(34, W / H, 0.1, 100);
+    camera.position.set(0.55, 1.35, 4.15);
+    this.camera = camera;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(W, H);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.82;
+    host.appendChild(renderer.domElement);
+    this.renderer = renderer;
+
+    // Studio environment (equirect gradient -> PMREM) for reflections & refraction
+    const envTex = this._makeEnvTexture(THREE);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromEquirectangular(envTex).texture;
+    envTex.dispose();
+    pmrem.dispose();
+
+    // Lights
+    const hemi = new THREE.HemisphereLight(0xffffff, 0xb2bac2, 0.32);
+    scene.add(hemi);
+    const key = new THREE.DirectionalLight(0xffffff, 1.45);
+    key.position.set(3.5, 6, 4);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near = 1; key.shadow.camera.far = 20;
+    key.shadow.camera.left = -4; key.shadow.camera.right = 4;
+    key.shadow.camera.top = 4; key.shadow.camera.bottom = -4;
+    key.shadow.bias = -0.0004;
+    key.shadow.radius = 6;
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+    fill.position.set(-4, 2, -2);
+    scene.add(fill);
+
+    // ---- Materials ----
+    this.metalMat = new THREE.MeshStandardMaterial({ color: 0xbfc5cc, metalness: 0.1, roughness: 0.78, flatShading: true, envMapIntensity: 0.6 });
+    this.gemClay = new THREE.MeshStandardMaterial({ color: 0xaac3e2, metalness: 0.0, roughness: 0.45, flatShading: true, side: THREE.DoubleSide, envMapIntensity: 0.55 });
+    this.gemGlass = new THREE.MeshPhysicalMaterial({ color: 0xaac3e2, metalness: 0, roughness: 0.06, transmission: 0.35, thickness: 1.2, attenuationDistance: 0.6, ior: 2.2, transparent: true, side: THREE.DoubleSide, envMapIntensity: 2.0, clearcoat: 1.0, clearcoatRoughness: 0.02 });
+
+    const R = 1.0, r = 0.15;         // band radius, tube
+    const headY = R + 0.05;
+
+    // Root group holding the ring; tilted so the stone faces up-and-toward the viewer
+    const root = new THREE.Group();
+    root.rotation.x = 0.52;
+    scene.add(root);
+
+    // ---- Band (torus, XY plane, axis Z) ----
+    const band = new THREE.Mesh(new THREE.TorusGeometry(R, r, 12, 72), this.metalMat);
+    band.castShadow = true; band.receiveShadow = true;
+    // taper: flatten tube a touch to read like a shank
+    band.scale.set(1, 1, 0.82);
+    root.add(band);
+
+    // ---- Pavé stones along the shank ----
+    const stoneGeo = new THREE.BoxGeometry(0.11, 0.1, 0.12);
+    const N = 40;
+    for (let i = 0; i < N; i++) {
+      const phi = (i / N) * Math.PI * 2;
+      // skip the top zone where the head sits (~90deg)
+      const deg = phi * 180 / Math.PI;
+      if (deg > 66 && deg < 114) continue;
+      const s = new THREE.Mesh(stoneGeo, this.metalMat);
+      const rad = R + r * 0.55;
+      s.position.set(Math.cos(phi) * rad, Math.sin(phi) * rad, 0);
+      s.rotation.z = phi;
+      s.castShadow = true;
+      root.add(s);
+    }
+
+    // ---- Head group (at top of band) ----
+    const head = new THREE.Group();
+    head.position.set(0, headY, 0);
+    root.add(head);
+
+    // basket / seat under the gem
+    const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.2, 0.34, 8, 1, true), this.metalMat);
+    basket.position.y = -0.12; basket.castShadow = true;
+    head.add(basket);
+
+    // ---- Gem (cushion cut, table +Y) ----
+    const gwr = 0.4, twr = 0.22, ch = 0.17, pd = 0.44;
+    this.gemMesh = new THREE.Mesh(this._makeGem(THREE, gwr, twr, ch, pd), this.gemClay);
+    this.gemMesh.position.y = 0.16;
+    this.gemMesh.castShadow = true;
+    head.add(this.gemMesh);
+
+    // ---- Halo of small stones around the gem ----
+    const haloGeo = new THREE.BoxGeometry(0.12, 0.15, 0.11);
+    const HN = 18, rh = gwr + 0.13;
+    for (let i = 0; i < HN; i++) {
+      const a = (i / HN) * Math.PI * 2 + Math.PI / HN;
+      const s = new THREE.Mesh(haloGeo, this.metalMat);
+      s.position.set(Math.cos(a) * rh, 0.2, Math.sin(a) * rh);
+      s.rotation.y = -a;
+      s.rotation.x = 0.35 * Math.sin(0); // stand upright
+      s.castShadow = true;
+      head.add(s);
+    }
+
+    // ---- 4 corner prongs gripping the gem ----
+    const prongGeo = new THREE.BoxGeometry(0.11, 0.46, 0.11);
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + i * Math.PI / 2;
+      const g = new THREE.Group();
+      const rad = gwr + 0.06;
+      g.position.set(Math.cos(a) * rad, 0.22, Math.sin(a) * rad);
+      g.rotation.y = -a + Math.PI / 2;
+      g.rotation.x = -0.5; // lean over the crown
+      const claw = new THREE.Mesh(prongGeo, this.metalMat);
+      claw.castShadow = true;
+      g.add(claw);
+      head.add(g);
+    }
+
+    // ---- Ground + shadow + grid ----
+    const groundY = -(R + r * 0.82) - 0.03;
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.34 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = groundY;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    this.grid = new THREE.GridHelper(40, 80, 0xbfc4c9, 0xd6dade);
+    this.grid.position.y = groundY + 0.001;
+    this.grid.material.opacity = 0.55; this.grid.material.transparent = true;
+    scene.add(this.grid);
+
+    // ---- Controls ----
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0.5, 0.1);
+    controls.minDistance = 1.8;
+    controls.maxDistance = 8;
+    controls.maxPolarAngle = Math.PI * 0.95;
+    controls.autoRotateSpeed = 1.4;
+    this.controls = controls;
+
+    this._onResize = () => {
+      const w = host.clientWidth || window.innerWidth, h = host.clientHeight || window.innerHeight;
+      camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
+    };
+    window.addEventListener('resize', this._onResize);
+
+    this._applyProps();
+
+    const loop = () => { this._raf = requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); };
+    loop();
+  }
+
+  _applyProps() {
+    if (!this._built || !this.metalMat) return;
+    const THREE = this.THREE;
+    const mode = this._val('materialMode', 'Clay');
+    const polished = mode === 'Polished';
+
+    this.metalMat.metalness = polished ? 1.0 : 0.12;
+    this.metalMat.roughness = polished ? 0.26 : 0.82;
+    this.metalMat.envMapIntensity = polished ? 1.6 : 0.6;
+    this.metalMat.color.set(this._val('metalColor', '#bfc5cc'));
+    this.metalMat.needsUpdate = true;
+
+    const gc = this._val('gemColor', '#aac3e2');
+    this.gemClay.color.set(gc);
+    this.gemGlass.color.set(gc);
+    const att = this.gemGlass.attenuationColor || this.gemGlass.attenuationTint;
+    if (att) att.set(gc);
+    this.gemMesh.material = polished ? this.gemGlass : this.gemClay;
+
+    if (this.controls) this.controls.autoRotate = !!this._val('autoRotate', true);
+    if (this.grid) this.grid.visible = !!this._val('showGrid', true);
+    if (this.renderer) this.renderer.toneMappingExposure = polished ? 0.78 : 0.82;
+  }
+
+  _makeGem(THREE, gwr, twr, ch, pd) {
+    const S = 8, verts = [];
+    const oct = (rad, y) => {
+      const pts = [];
+      for (let i = 0; i < S; i++) {
+        const a = (i / S) * Math.PI * 2 + Math.PI / S;
+        pts.push([Math.cos(a) * rad, y, Math.sin(a) * rad]);
+      }
+      return pts;
+    };
+    const girdle = oct(gwr, 0);
+    const table = oct(twr, ch);
+    const push = (p) => { verts.push(p[0], p[1], p[2]); };
+    const tri = (a, b, c) => { push(a); push(b); push(c); };
+    const topC = [0, ch, 0], culet = [0, -pd, 0];
+    for (let i = 0; i < S; i++) {
+      const j = (i + 1) % S;
+      // table facets
+      tri(topC, table[i], table[j]);
+      // crown quad (girdle -> table)
+      tri(girdle[i], girdle[j], table[j]);
+      tri(girdle[i], table[j], table[i]);
+      // pavilion
+      tri(culet, girdle[j], girdle[i]);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  _makeEnvTexture(THREE) {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 256;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.45, '#eef1f4');
+    grad.addColorStop(0.55, '#d7dde2');
+    grad.addColorStop(1, '#aeb6bd');
+    g.fillStyle = grad; g.fillRect(0, 0, 512, 256);
+    // soft light blobs
+    g.globalAlpha = 0.5;
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.ellipse(140, 70, 90, 40, 0, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(380, 90, 70, 30, 0, 0, 7); g.fill();
+    g.globalAlpha = 1;
+    const tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    return tex;
+  }
+}
+</script>
+</body>
+</html>

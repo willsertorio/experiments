@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;height:100%;background:#05080e;overflow:hidden;font-family:ui-monospace,"SF Mono",Menlo,monospace;}
+  *{box-sizing:border-box;}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</helmet>
+<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#05080e;">
+  <div style="position:relative;height:min(100vh,calc(100vw*16/9));aspect-ratio:9/16;max-width:100vw;overflow:hidden;box-shadow:0 0 60px rgba(0,0,0,.6);">
+    <div ref="{{ mount }}" style="position:absolute;inset:0;background:linear-gradient(#1b2c47,#0c1626);"></div>
+    <div style="position:absolute;left:14px;bottom:12px;color:#cfe0f5;font-size:10px;letter-spacing:.05em;opacity:.75;pointer-events:none;text-transform:uppercase;">WASD to walk · drag orbit · tap light</div>
+    <div ref="{{ toggle }}" onClick="{{ onToggle }}" style="position:absolute;right:14px;bottom:12px;color:#0d213b;background:#dbe8fb;font-size:10px;letter-spacing:.05em;padding:7px 11px;border-radius:20px;cursor:pointer;text-transform:uppercase;user-select:none;box-shadow:0 4px 14px rgba(0,0,0,.35);">Flashlight: on</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { on: true };
+  renderVals() {
+    return {
+      mount: (el) => { this.mountEl = el; },
+      toggle: (el) => { this.toggleEl = el; },
+      onToggle: () => this.toggleFlashlight()
+    };
+  }
+
+  toggleFlashlight() {
+    const on = !this.state.on;
+    this.setState({ on });
+    if (this.beam) this.beam.visible = on;
+    if (this.spot) this.spot.intensity = on ? 2.6 : 0;
+    if (this.toggleEl) this.toggleEl.textContent = "Flashlight: " + (on ? "on" : "off");
+  }
+
+  componentDidMount() {
+    const wait = () => {
+      if (!window.THREE || !this.mountEl) { requestAnimationFrame(wait); return; }
+      this.init();
+    };
+    wait();
+  }
+
+  init() {
+    const THREE = window.THREE;
+    const el = this.mountEl;
+    const W = el.clientWidth, H = el.clientHeight;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x16233a);
+    scene.fog = new THREE.FogExp2(0x16233a, 0.05);
+
+    const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 200);
+    camera.position.set(10, 9, 13);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    el.appendChild(renderer.domElement);
+
+    // ---- lighting ----
+    scene.add(new THREE.HemisphereLight(0x2c3f5e, 0x0a1424, 0.35));
+    const sun = new THREE.DirectionalLight(0x93a7c9, 0.28);
+    sun.position.set(-9, 16, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const d = 20;
+    Object.assign(sun.shadow.camera, { left: -d, right: d, top: d, bottom: -d, near: 1, far: 60 });
+    scene.add(sun);
+
+    // ---- helpers ----
+    const flat = (color) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.95, metalness: 0 });
+    const add = (geo, mat, x, y, z, parent) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.castShadow = true; m.receiveShadow = true;
+      (parent || scene).add(m);
+      return m;
+    };
+
+    // ---- ground ----
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x1b2c47, roughness: 1, flatShading: true });
+    const ground = add(new THREE.PlaneGeometry(80, 80), groundMat, 0, 0, 0);
+    ground.rotation.x = -Math.PI / 2;
+    const grid = new THREE.GridHelper(80, 80, 0x24395a, 0x24395a);
+    grid.position.y = 0.01;
+    grid.material.opacity = 0.35; grid.material.transparent = true;
+    scene.add(grid);
+
+    // ---- trees (stacked cones) ----
+    const trunkMat = flat(0x6b4a2f);
+    const makeTree = (x, z, s, greens) => {
+      const g = new THREE.Group();
+      add(new THREE.CylinderGeometry(0.16 * s, 0.2 * s, 0.9 * s, 6), trunkMat, 0, 0.45 * s, 0, g);
+      const tiers = [[1.05, 0.9, 1.05], [0.85, 1.0, 2.0], [0.6, 0.9, 2.9]];
+      tiers.forEach((t, i) => {
+        const c = add(new THREE.ConeGeometry(t[0] * s, t[1] * s, 8), flat(greens[i % greens.length]), 0, t[2] * s, 0, g);
+      });
+      g.position.set(x, 0, z);
+      g.rotation.y = Math.random() * Math.PI;
+      scene.add(g);
+      return g;
+    };
+    const greensA = [0x2f6b3f, 0x357b47, 0x3c8a4f];
+    const greensB = [0x4a7a52, 0x567f5c, 0x5f8a63];
+    const treeSpots = [
+      [-7, -4, 1.1, greensA], [-9, 1, 1.0, greensB], [-6.5, 4, 1.15, greensA],
+      [-3, 7, 1.0, greensB], [1, 8, 0.95, greensA], [5.5, 6.5, 1.1, greensB],
+      [8.5, 3.5, 1.0, greensA], [9.5, -1, 1.05, greensB], [-8.5, -8, 1.2, greensA],
+      [-3.5, -8.5, 1.0, greensB], [3, -9, 1.1, greensA], [7.5, -7, 1.0, greensB],
+      [-11, -3, 0.9, greensB], [2.5, 4.5, 0.85, greensA]
+    ];
+    treeSpots.forEach(t => makeTree(t[0], t[1], t[2], t[3]));
+
+    // sphere topiary (from reference, back-left)
+    (() => {
+      const g = new THREE.Group();
+      add(new THREE.CylinderGeometry(0.22, 0.26, 2.0, 6), flat(0x5f8a63), 0, 1.0, 0, g);
+      add(new THREE.IcosahedronGeometry(0.85, 1), flat(0x3c8a4f), 0, 2.5, 0, g);
+      g.position.set(-4.5, 0, 3.5);
+      scene.add(g);
+    })();
+
+    // ---- houses (box + pyramid roof) ----
+    const makeHouse = (x, z, ry, wallColor, roofColor, s) => {
+      const g = new THREE.Group();
+      s = s || 1;
+      add(new THREE.BoxGeometry(2.4 * s, 1.9 * s, 2.4 * s), flat(wallColor), 0, 0.95 * s, 0, g);
+      const roof = add(new THREE.ConeGeometry(2.15 * s, 1.5 * s, 4), flat(roofColor), 0, 2.65 * s, 0, g);
+      roof.rotation.y = Math.PI / 4;
+      g.position.set(x, 0, z);
+      g.rotation.y = ry;
+      scene.add(g);
+    };
+    makeHouse(-6.5, 0.5, 0.3, 0x8aa38f, 0x556b5c, 1.05);   // green cottage left
+    makeHouse(6.8, 1.5, -0.5, 0x9fb0bd, 0x33404a, 1.05);   // grey-blue right
+    makeHouse(4.2, 4.2, 0.2, 0x445263, 0x2b3540, 1.0);     // dark navy behind boy
+    makeHouse(8.5, -6, -0.4, 0x2f3b47, 0x232d36, 1.6);     // big dark foreground right
+    makeHouse(-9.5, -6, 0.5, 0xaeb9bf, 0x515c63, 1.1);     // light grey back-left
+
+    // ---- well ----
+    const well = new THREE.Group();
+    const stone = flat(0x8b8f92);
+    const stoneDk = flat(0x71767a);
+    // stacked stone rings
+    for (let ring = 0; ring < 3; ring++) {
+      const n = 10, r = 1.5, y = 0.35 + ring * 0.55;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + (ring % 2 ? 0.3 : 0);
+        const s = add(new THREE.BoxGeometry(0.95, 0.5, 0.6), (i % 2 ? stone : stoneDk),
+          Math.cos(a) * r, y, Math.sin(a) * r, well);
+        s.rotation.y = -a;
+      }
+    }
+    // dark inner
+    add(new THREE.CylinderGeometry(1.15, 1.15, 1.7, 12), new THREE.MeshStandardMaterial({ color: 0x141b24, roughness: 1 }), 0, 0.9, 0, well);
+    // posts + roof
+    const woodMat = flat(0x8b8f92);
+    [[-1.15, -1.15], [1.15, -1.15], [1.15, 1.15], [-1.15, 1.15]].forEach(p => {
+      add(new THREE.BoxGeometry(0.22, 2.4, 0.22), woodMat, p[0], 2.9, p[1], well);
+    });
+    const roof = add(new THREE.ConeGeometry(2.3, 1.8, 4), flat(0x8b8f92), 0, 5.0, 0, well);
+    roof.rotation.y = Math.PI / 4;
+    well.position.set(-1.5, 0, 0);
+    scene.add(well);
+
+    // ---- the boy ----
+    const boy = new THREE.Group();
+    const skin = flat(0xcaa079);
+    const shirt = flat(0x2f6fd0);
+    const pants = flat(0x151b26);
+    const hair = flat(0x14161c);
+    // legs
+    add(new THREE.BoxGeometry(0.42, 1.5, 0.42), pants, -0.28, 0.75, 0, boy);
+    add(new THREE.BoxGeometry(0.42, 1.5, 0.42), pants, 0.28, 0.75, 0, boy);
+    // body
+    add(new THREE.BoxGeometry(1.1, 1.35, 0.6), shirt, 0, 2.15, 0, boy);
+    // arms
+    const armL = add(new THREE.BoxGeometry(0.34, 1.2, 0.36), shirt, -0.72, 2.2, 0, boy);
+    const armR = add(new THREE.BoxGeometry(0.34, 1.2, 0.36), shirt, 0.72, 2.15, 0.2, boy);
+    armR.rotation.x = -0.9; armR.position.set(0.62, 2.15, 0.45);
+    // hands
+    add(new THREE.BoxGeometry(0.3, 0.3, 0.3), skin, -0.72, 1.55, 0, boy);
+    const handR = add(new THREE.BoxGeometry(0.32, 0.32, 0.32), skin, 0.62, 1.85, 0.95, boy);
+    // head + hair
+    add(new THREE.BoxGeometry(0.85, 0.85, 0.8), skin, 0, 3.3, 0, boy);
+    add(new THREE.BoxGeometry(0.92, 0.42, 0.88), hair, 0, 3.72, -0.02, boy);
+    add(new THREE.BoxGeometry(0.92, 0.4, 0.2), hair, 0, 3.42, -0.34, boy);
+    // eyes
+    const eyeMat = flat(0x1a1a1a);
+    add(new THREE.BoxGeometry(0.1, 0.14, 0.05), eyeMat, -0.2, 3.32, 0.41, boy);
+    add(new THREE.BoxGeometry(0.1, 0.14, 0.05), eyeMat, 0.2, 3.32, 0.41, boy);
+    // flashlight
+    const fl = add(new THREE.CylinderGeometry(0.13, 0.16, 0.7, 10), flat(0xf2c94c), 0.62, 1.9, 1.35, boy);
+    fl.rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10), flat(0xfff2c0), 0.62, 1.9, 1.68, boy).rotation.x = Math.PI / 2;
+
+    // flashlight beam (cone glow)
+    const beamGeo = new THREE.ConeGeometry(1.4, 4.2, 24, 1, true);
+    const beamMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false });
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.set(0.62, 1.9, 3.8);
+    beam.rotation.x = -Math.PI / 2;
+    boy.add(beam);
+    this.beam = beam;
+
+    const spot = new THREE.SpotLight(0xfff0b8, 4.5, 18, Math.PI / 7, 0.4, 1.0);
+    spot.position.set(0.62, 1.9, 1.75);
+    const spotTarget = new THREE.Object3D();
+    spotTarget.position.set(0.62, 1.6, 6);
+    boy.add(spot); boy.add(spotTarget);
+    spot.target = spotTarget;
+    this.spot = spot;
+
+    boy.position.set(1.7, 0, 0.6);
+    boy.rotation.y = -0.35;
+    scene.add(boy);
+    this.boy = boy;
+    this.boyLegs = [boy.children[0], boy.children[1]];
+
+    // obstacles for collision {x, z, r}
+    const obstacles = [
+      { x: -1.5, z: 0, r: 2.2 },       // well
+      { x: -6.5, z: 0.5, r: 2.0 },     // green cottage
+      { x: 6.8, z: 1.5, r: 2.0 },      // grey-blue
+      { x: 4.2, z: 4.2, r: 1.9 },      // navy
+      { x: 8.5, z: -6, r: 3.0 },       // big dark
+      { x: -9.5, z: -6, r: 2.1 }       // light grey
+    ];
+
+    // sparkle (bottom-right accent from reference) — billboard
+    (() => {
+      const s = new THREE.Group();
+      const m = new THREE.MeshBasicMaterial({ color: 0xdcecff });
+      const a = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.9), m);
+      const b = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.16), m);
+      s.add(a); s.add(b);
+      s.position.set(5, 1.2, 5.5);
+      scene.add(s);
+      this.sparkle = s;
+    })();
+
+    // ---- fireflies ----
+    const fireflies = [];
+    const ffGeo = new THREE.SphereGeometry(0.07, 6, 6);
+    for (let i = 0; i < 46; i++) {
+      const m = new THREE.MeshBasicMaterial({ color: 0xdff59a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+      const f = new THREE.Mesh(ffGeo, m);
+      const bx = (Math.random() - 0.5) * 30, bz = (Math.random() - 0.5) * 30;
+      f.position.set(bx, 0.6 + Math.random() * 3, bz);
+      f.userData = {
+        bx, bz, by: 0.6 + Math.random() * 3,
+        sx: Math.random() * Math.PI * 2, sy: Math.random() * Math.PI * 2, sz: Math.random() * Math.PI * 2,
+        ex: 0.4 + Math.random() * 1.2, ez: 0.4 + Math.random() * 1.2, ey: 0.3 + Math.random() * 0.6,
+        blink: 1 + Math.random() * 3, off: Math.random() * 10
+      };
+      scene.add(f);
+      fireflies.push(f);
+    }
+    this.fireflies = fireflies;
+
+    // ---- keyboard movement ----
+    const keys = {};
+    const dkey = e => {
+      const k = e.key.toLowerCase();
+      if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+        keys[k] = e.type === 'keydown'; e.preventDefault();
+      }
+    };
+    addEventListener('keydown', dkey);
+    addEventListener('keyup', dkey);
+    const clearKeys = () => { for (const k in keys) keys[k] = false; };
+    addEventListener('blur', clearKeys);
+    document.addEventListener('visibilitychange', clearKeys);
+
+    // ---- orbit controls (minimal, self-contained) ----
+    const cam = camera, target = new THREE.Vector3(boy.position.x, 1.6, boy.position.z);
+    let radius = camera.position.distanceTo(target);
+    let theta = Math.atan2(camera.position.x - target.x, camera.position.z - target.z);
+    let phi = Math.acos((camera.position.y - target.y) / radius);
+    const dom = renderer.domElement;
+    let dragging = false, px = 0, py = 0, moved = 0;
+    const apply = () => {
+      phi = Math.max(0.25, Math.min(1.45, phi));
+      radius = Math.max(6, Math.min(30, radius));
+      cam.position.set(
+        target.x + radius * Math.sin(phi) * Math.sin(theta),
+        target.y + radius * Math.cos(phi),
+        target.z + radius * Math.sin(phi) * Math.cos(theta));
+      cam.lookAt(target);
+    };
+    apply();
+    dom.addEventListener('pointerdown', e => { dragging = true; moved = 0; px = e.clientX; py = e.clientY; });
+    addEventListener('pointerup', () => {
+      if (dragging && moved < 6) this.toggleFlashlight();  // tap = toggle light
+      dragging = false;
+    });
+    addEventListener('pointermove', e => {
+      if (!dragging) return;
+      moved += Math.abs(e.clientX - px) + Math.abs(e.clientY - py);
+      theta -= (e.clientX - px) * 0.007;
+      phi -= (e.clientY - py) * 0.007;
+      px = e.clientX; py = e.clientY; apply();
+    });
+    dom.addEventListener('wheel', e => { e.preventDefault(); radius += e.deltaY * 0.012; apply(); }, { passive: false });
+
+    // ---- resize ----
+    const onResize = () => {
+      const w = el.clientWidth, h = el.clientHeight;
+      cam.aspect = w / h; cam.updateProjectionMatrix(); renderer.setSize(w, h);
+    };
+    addEventListener('resize', onResize);
+
+    // ---- loop ----
+    let t = 0, walkPhase = 0;
+    const tmp = new THREE.Vector3();
+    const loop = () => {
+      this._raf = requestAnimationFrame(loop);
+      t += 0.016;
+
+      // camera-relative movement input
+      let ix = 0, iz = 0;
+      if (keys['w'] || keys['arrowup']) iz -= 1;
+      if (keys['s'] || keys['arrowdown']) iz += 1;
+      if (keys['a'] || keys['arrowleft']) ix -= 1;
+      if (keys['d'] || keys['arrowright']) ix += 1;
+      const moving = ix || iz;
+      if (moving) {
+        // forward = from camera toward target, flattened
+        const fwd = tmp.set(target.x - cam.position.x, 0, target.z - cam.position.z).normalize();
+        const rightX = -fwd.z, rightZ = fwd.x;
+        let mx = fwd.x * -iz + rightX * ix;
+        let mz = fwd.z * -iz + rightZ * ix;
+        const len = Math.hypot(mx, mz) || 1;
+        mx /= len; mz /= len;
+        const speed = 0.09;
+        let nx = boy.position.x + mx * speed;
+        let nz = boy.position.z + mz * speed;
+        // collision: block if inside an obstacle radius (boy radius ~0.6)
+        for (const o of obstacles) {
+          const dx = nx - o.x, dz = nz - o.z, dist = Math.hypot(dx, dz), min = o.r + 0.6;
+          if (dist < min) {
+            const push = (min - dist) / dist;
+            nx += dx * push; nz += dz * push;
+          }
+        }
+        nx = Math.max(-18, Math.min(18, nx));
+        nz = Math.max(-18, Math.min(18, nz));
+        boy.position.x = nx; boy.position.z = nz;
+        // face movement direction (smooth)
+        const targetRot = Math.atan2(mx, mz);
+        let dr = targetRot - boy.rotation.y;
+        while (dr > Math.PI) dr -= Math.PI * 2;
+        while (dr < -Math.PI) dr += Math.PI * 2;
+        boy.rotation.y += dr * 0.18;
+        // walk bob
+        walkPhase += 0.28;
+        this.boyLegs[0].rotation.x = Math.sin(walkPhase) * 0.6;
+        this.boyLegs[1].rotation.x = -Math.sin(walkPhase) * 0.6;
+        boy.position.y = Math.abs(Math.sin(walkPhase)) * 0.05;
+      } else {
+        this.boyLegs[0].rotation.x *= 0.8;
+        this.boyLegs[1].rotation.x *= 0.8;
+        boy.position.y *= 0.8;
+      }
+      // camera follows boy
+      target.x += (boy.position.x - target.x) * 0.12;
+      target.z += (boy.position.z - target.z) * 0.12;
+      apply();
+
+      for (const f of fireflies) {
+        const u = f.userData;
+        f.position.x = u.bx + Math.sin(t * 0.5 + u.sx) * u.ex;
+        f.position.z = u.bz + Math.cos(t * 0.4 + u.sz) * u.ez;
+        f.position.y = u.by + Math.sin(t * 0.7 + u.sy) * u.ey;
+        f.material.opacity = 0.15 + Math.pow(Math.max(0, Math.sin(t * u.blink + u.off)), 3) * 0.85;
+      }
+      if (this.beam) this.beam.material.opacity = 0.3 + Math.sin(t * 3) * 0.05;
+      if (this.spot) this.spot.intensity = this.state.on ? 4.2 + Math.sin(t * 4) * 0.5 : 0;
+      if (this.sparkle) { this.sparkle.rotation.z = t * 0.6; this.sparkle.lookAt(cam.position); }
+      renderer.render(scene, cam);
+    };
+    loop();
+    this._cleanup = () => { cancelAnimationFrame(this._raf); removeEventListener('resize', onResize); removeEventListener('keydown', dkey); removeEventListener('keyup', dkey); removeEventListener('blur', clearKeys); document.removeEventListener('visibilitychange', clearKeys); };
+  }
+
+  componentWillUnmount() { if (this._cleanup) this._cleanup(); }
+}
+</script>
+</body>
+</html>

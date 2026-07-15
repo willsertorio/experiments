@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Captain Ameri-Cat</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #efece6; }
+  canvas { display: block; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  #hud {
+    position: fixed; left: 0; right: 0; bottom: 22px; text-align: center; pointer-events: none;
+    font-family: Helvetica, Arial, sans-serif; color: #8a8375; user-select: none;
+  }
+  #hud .t { font-size: 13px; letter-spacing: 0.28em; font-weight: 700; color: #6f695c; }
+  #hud .s { font-size: 11px; letter-spacing: 0.08em; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="t">CAPTAIN AMERI-CAT</div>
+  <div class="s">drag to orbit &middot; scroll to zoom</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const BG = 0xefece6;
+const BLUE = 0x3d5da8, RED = 0xc8474b, CREAM = 0xf3eee3, FUR = 0xe6953f, FUR_D = 0xc9722c, PINK = 0xdd8890, DARK = 0x3a3230;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(BG);
+scene.fog = new THREE.Fog(BG, 10, 26);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// lights
+scene.add(new THREE.HemisphereLight(0xffffff, 0xcfc4ae, 0.75));
+const key = new THREE.DirectionalLight(0xfff6e8, 1.0);
+key.position.set(3.5, 7, 4.5);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -6; key.shadow.camera.right = 6;
+key.shadow.camera.top = 8; key.shadow.camera.bottom = -2;
+key.shadow.bias = -0.0004;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xbcd0ff, 0.45);
+rim.position.set(-5, 4, -5);
+scene.add(rim);
+
+const mat = (c, rough=0.85) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, flatShading: true });
+const lp = (r, w=8, h=6) => new THREE.SphereGeometry(r, w, h);
+
+// studio floor + pedestal
+const floor = new THREE.Mesh(new THREE.CircleGeometry(40, 48), new THREE.MeshBasicMaterial({ color: BG }));
+floor.rotation.x = -Math.PI/2;
+scene.add(floor);
+const shadowCatcher = new THREE.Mesh(new THREE.CircleGeometry(12, 48), new THREE.ShadowMaterial({ opacity: 0.18 }));
+shadowCatcher.rotation.x = -Math.PI/2;
+shadowCatcher.position.y = 0.001;
+shadowCatcher.receiveShadow = true;
+scene.add(shadowCatcher);
+const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.6, 0.7, 28), new THREE.MeshStandardMaterial({ color: 0xdedacf, roughness: 0.95 }));
+pedestal.position.y = 0.35;
+pedestal.castShadow = pedestal.receiveShadow = true;
+scene.add(pedestal);
+
+// star shape helper
+function starGeo(outer, inner, depth) {
+  const s = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = i * Math.PI / 5 - Math.PI / 2;
+    i === 0 ? s.moveTo(r * Math.cos(a), -r * Math.sin(a)) : s.lineTo(r * Math.cos(a), -r * Math.sin(a));
+  }
+  s.closePath();
+  return new THREE.ExtrudeGeometry(s, { depth: depth, bevelEnabled: false });
+}
+
+// ===== cat =====
+const cat = new THREE.Group();
+cat.position.y = 0.7;
+scene.add(cat);
+function add(parent, mesh) { mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh; }
+
+// legs + boots
+[-1, 1].forEach(side => {
+  const leg = add(cat, new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.23, 0.6, 7), mat(BLUE)));
+  leg.position.set(side * 0.33, 0.62, 0);
+  const boot = add(cat, new THREE.Mesh(lp(0.28, 7, 5), mat(RED)));
+  boot.scale.set(1.05, 0.7, 1.4);
+  boot.position.set(side * 0.34, 0.22, 0.08);
+});
+
+// torso (breathes)
+const torsoG = new THREE.Group();
+torsoG.position.y = 1.45;
+cat.add(torsoG);
+const torso = add(torsoG, new THREE.Mesh(lp(0.78), mat(BLUE)));
+torso.scale.set(1, 1.15, 0.85);
+// abdomen stripes
+[[-0.43, RED], [-0.29, CREAM], [-0.15, RED]].forEach(([dy, c]) => {
+  const f = Math.sqrt(1 - Math.pow(dy / 0.897, 2)) * 1.06;
+  const ring = add(torsoG, new THREE.Mesh(new THREE.CylinderGeometry(0.78 * f, 0.78 * f * 0.97, 0.145, 16), mat(c)));
+  ring.scale.z = 0.85;
+  ring.position.y = dy;
+});
+// chest star
+const chestStar = add(torsoG, new THREE.Mesh(starGeo(0.27, 0.11, 0.05), mat(CREAM, 0.6)));
+chestStar.position.set(0, 0.27, 0.63);
+chestStar.rotation.x = -0.18;
+
+// right arm (fist by hip)
+const armR = new THREE.Group();
+armR.position.set(-0.70, 1.80, 0.02);
+armR.rotation.set(0.22, 0, -0.42);
+cat.add(armR);
+add(armR, new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.155, 0.6, 7), mat(BLUE))).position.y = -0.3;
+add(armR, new THREE.Mesh(lp(0.19, 7, 5), mat(RED))).position.y = -0.65;
+
+// left arm + shield
+const armL = new THREE.Group();
+armL.position.set(0.70, 1.80, 0.02);
+armL.rotation.set(-0.45, 0, 0.60);
+cat.add(armL);
+add(armL, new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.155, 0.6, 7), mat(BLUE))).position.y = -0.3;
+add(armL, new THREE.Mesh(lp(0.19, 7, 5), mat(RED))).position.y = -0.62;
+
+const shield = new THREE.Group();
+[[0.80, 0.06, RED], [0.62, 0.075, CREAM], [0.44, 0.09, RED], [0.26, 0.105, 0x33518f]].forEach(([r, h, c], i) => {
+  add(shield, new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.94, h, 26), mat(c, 0.55))).position.y = h / 2 + i * 0.014;
+});
+// paw emblem on the boss
+const pawM = mat(CREAM, 0.5);
+const pad = add(shield, new THREE.Mesh(lp(0.10, 7, 5), pawM));
+pad.scale.set(1.15, 0.35, 0.95);
+pad.position.set(0, 0.165, 0.035);
+[[-0.095, -0.09], [0, -0.125], [0.095, -0.09]].forEach(([x, z]) => {
+  const toe = add(shield, new THREE.Mesh(lp(0.048, 6, 4), pawM));
+  toe.scale.y = 0.45;
+  toe.position.set(x, 0.165, z);
+});
+shield.rotation.set(Math.PI / 2 + 0.12, 0.55, 0);
+shield.position.set(0.32, -0.62, 0.30);
+armL.add(shield);
+shield.traverse(o => { o.castShadow = true; });
+
+// head
+const head = new THREE.Group();
+head.position.set(0, 2.62, 0.06);
+cat.add(head);
+const cowl = add(head, new THREE.Mesh(lp(0.82, 9, 7), mat(BLUE)));
+// exposed face
+const face = add(head, new THREE.Mesh(lp(0.60, 8, 6), mat(FUR)));
+face.scale.set(0.80, 0.62, 0.60);
+face.position.set(0, -0.34, 0.52);
+// muzzle
+const muzzle = add(head, new THREE.Mesh(lp(0.27, 7, 5), mat(CREAM)));
+muzzle.scale.set(1.2, 0.75, 0.85);
+muzzle.position.set(0, -0.34, 0.74);
+// nose
+const nose = add(head, new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.09, 4), mat(PINK, 0.5)));
+nose.rotation.x = Math.PI;
+nose.rotation.y = Math.PI / 4;
+nose.position.set(0, -0.225, 0.97);
+// eyes
+const eyes = [];
+[-1, 1].forEach(side => {
+  const eye = new THREE.Mesh(lp(0.115, 8, 6), mat(DARK, 0.35));
+  eye.scale.set(1, 1.25, 0.55);
+  eye.position.set(side * 0.30, 0.0, 0.74);
+  const hi = new THREE.Mesh(lp(0.038, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  hi.position.set(side * 0.03 + 0.02, 0.05, 0.09);
+  eye.add(hi);
+  head.add(eye);
+  eyes.push(eye);
+});
+// whiskers
+[-1, 1].forEach(side => {
+  [[-0.30, 0.03], [-0.38, -0.04]].forEach(([y, tilt]) => {
+    const w = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.014, 0.014), mat(0xf6f0e2, 0.4));
+    w.position.set(side * 0.48, y, 0.80);
+    w.rotation.y = -side * 0.35;
+    w.rotation.z = side * tilt * 6;
+    head.add(w);
+  });
+});
+// cowl ears + inner
+const ears = [];
+[-1, 1].forEach(side => {
+  const ear = add(head, new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.52, 5), mat(BLUE)));
+  ear.position.set(side * 0.44, 0.72, -0.04);
+  ear.rotation.z = -side * 0.32;
+  const inner = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.28, 5), mat(PINK, 0.7));
+  inner.position.set(0, -0.06, 0.10);
+  ear.add(inner);
+  ears.push(ear);
+});
+// forehead star
+const browStar = add(head, new THREE.Mesh(starGeo(0.12, 0.05, 0.04), mat(CREAM, 0.6)));
+browStar.position.set(0, 0.34, 0.68);
+browStar.rotation.x = -0.42;
+
+// tail (chained pivots, pokes out of the suit)
+const tailPivots = [];
+let parent = cat;
+let pos = new THREE.Vector3(0, 1.12, -0.68);
+const radii = [0.12, 0.10, 0.085, 0.07, 0.055];
+for (let i = 0; i < 4; i++) {
+  const p = new THREE.Group();
+  p.position.copy(pos);
+  p.rotation.x = i === 0 ? -1.85 : 0.42;
+  parent.add(p);
+  const seg = add(p, new THREE.Mesh(new THREE.CylinderGeometry(radii[i + 1], radii[i], 0.34, 6), mat(i % 2 === 0 ? FUR : FUR_D)));
+  seg.position.y = 0.17;
+  tailPivots.push(p);
+  parent = p;
+  pos = new THREE.Vector3(0, 0.34, 0);
+}
+const tip = add(parent, new THREE.Mesh(lp(0.09, 6, 4), mat(CREAM)));
+tip.position.y = 0.38;
+
+// ===== orbit controls (hand-rolled) =====
+const target = new THREE.Vector3(0, 1.65, 0);
+let theta = 0.45, phi = 1.22, radius = 8.2;
+let thetaT = theta, phiT = phi, radiusT = radius;
+const pointers = new Map();
+let pinchDist = 0;
+const el = renderer.domElement;
+el.addEventListener('pointerdown', e => {
+  el.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+  }
+});
+el.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  const p = pointers.get(e.pointerId);
+  if (pointers.size === 1) {
+    thetaT -= (e.clientX - p.x) * 0.006;
+    phiT = Math.max(0.5, Math.min(1.48, phiT - (e.clientY - p.y) * 0.005));
+  }
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinchDist > 0) radiusT = Math.max(4.2, Math.min(13, radiusT * pinchDist / d));
+    pinchDist = d;
+  }
+});
+const endPointer = e => pointers.delete(e.pointerId);
+el.addEventListener('pointerup', endPointer);
+el.addEventListener('pointercancel', endPointer);
+el.addEventListener('wheel', e => {
+  e.preventDefault();
+  radiusT = Math.max(4.2, Math.min(13, radiusT * Math.exp(e.deltaY * 0.001)));
+}, { passive: false });
+
+// ===== idle animation =====
+const clock = new THREE.Clock();
+let nextBlink = 2.5, blinkEnd = 0, nextTwitch = 4, twitchEnd = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  const cur = renderer.getSize(new THREE.Vector2());
+  if ((cur.x !== innerWidth || cur.y !== innerHeight) && innerWidth > 0 && innerHeight > 0) {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  const t = clock.getElapsedTime();
+  // breathing
+  const br = Math.sin(t * 2.1);
+  torsoG.scale.setScalar(1 + br * 0.014);
+  torsoG.position.y = 1.45 + br * 0.012;
+  head.position.y = 2.62 + Math.sin(t * 2.1 + 0.5) * 0.028;
+  head.rotation.z = Math.sin(t * 0.7) * 0.035;
+  head.rotation.y = Math.sin(t * 0.45) * 0.06;
+  cat.rotation.y = Math.sin(t * 0.5) * 0.03;
+  armR.rotation.z = -0.42 + Math.sin(t * 2.1 + 1) * 0.02;
+  armL.rotation.x = -0.45 + Math.sin(t * 2.1 + 1.3) * 0.025;
+  // tail sway
+  tailPivots.forEach((p, i) => {
+    p.rotation.z = Math.sin(t * 1.7 - i * 0.6) * 0.17;
+  });
+  // blink
+  if (t > nextBlink) { blinkEnd = t + 0.12; nextBlink = t + 2.2 + Math.random() * 3.5; }
+  const blinking = t < blinkEnd;
+  eyes.forEach(e => { e.scale.y = blinking ? 0.12 : 1.25; });
+  // ear twitch
+  if (t > nextTwitch) { twitchEnd = t + 0.3; nextTwitch = t + 3 + Math.random() * 5; }
+  if (t < twitchEnd) {
+    const k = Math.sin((1 - (twitchEnd - t) / 0.3) * Math.PI);
+    ears[1].rotation.z = -0.32 - k * 0.3;
+  } else { ears[1].rotation.z = -0.32; }
+  // camera damping
+  theta += (thetaT - theta) * 0.12;
+  phi += (phiT - phi) * 0.12;
+  radius += (radiusT - radius) * 0.12;
+  camera.position.set(
+    target.x + radius * Math.sin(phi) * Math.sin(theta),
+    target.y + radius * Math.cos(phi),
+    target.z + radius * Math.sin(phi) * Math.cos(theta)
+  );
+  camera.lookAt(target);
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
