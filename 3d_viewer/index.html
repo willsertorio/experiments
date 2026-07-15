@@ -53,7 +53,16 @@
   .max:hover{color:var(--text);border-color:var(--accent)}
   .open{color:var(--muted);text-decoration:none;font-size:12px;padding:2px 4px}
   .open:hover{color:var(--accent)}
-  iframe{flex:1 1 auto;width:100%;border:0;background:#000;min-height:0}
+  .frame{flex:1 1 auto;position:relative;min-height:0;background:#0b0e12}
+  iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
+  .play{position:absolute;inset:0;width:100%;height:100%;border:0;cursor:pointer;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+        background:#0b0e12;color:var(--muted);transition:color .15s,background .15s;z-index:2}
+  .play:hover{background:#10151b;color:var(--text)}
+  .play .tri{width:0;height:0;border-style:solid;border-width:13px 0 13px 22px;
+             border-color:transparent transparent transparent currentColor;margin-left:5px}
+  .play em{font-style:normal;font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+  .frame.running .play{display:none}
   .pane.empty .none{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
        gap:6px;color:var(--muted);font-size:12px;text-align:center;padding:12px}
   .pane.empty .none span{font-size:11px;color:#5d6874}
@@ -94,20 +103,20 @@
           <div class="pane-head"><span class="dot orig"></span>Original
             <button class="max" title="Maximize">⤢</button>
             <a class="open" href="apps/original_1.html" target="_blank" rel="noopener">↗</a></div>
-          <iframe data-src="apps/original_1.html" loading="lazy"></iframe>
+          <div class="frame"><iframe data-src="apps/original_1.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
         <div class="stack">
           <div class="pane" data-label="Redesign (assets)">
             <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
               <button class="max" title="Maximize">⤢</button>
               <a class="open" href="apps/final_1/index.html" target="_blank" rel="noopener">↗</a></div>
-            <iframe data-src="apps/final_1/index.html" loading="lazy"></iframe>
+            <div class="frame"><iframe data-src="apps/final_1/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
           </div>
           <div class="pane" data-label="Primitive redesign">
             <div class="pane-head"><span class="dot prim"></span>Primitive redesign
               <button class="max" title="Maximize">⤢</button>
               <a class="open" href="apps/prim_1/index.html" target="_blank" rel="noopener">↗</a></div>
-            <iframe data-src="apps/prim_1/index.html" loading="lazy"></iframe>
+            <div class="frame"><iframe data-src="apps/prim_1/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
           </div>
         </div>
       </div>
@@ -131,20 +140,20 @@ style: Pixar style 3D cartoon, smooth textures, not realistic, high quality rend
           <div class="pane-head"><span class="dot orig"></span>Original
             <button class="max" title="Maximize">⤢</button>
             <a class="open" href="apps/original_3.html" target="_blank" rel="noopener">↗</a></div>
-          <iframe data-src="apps/original_3.html" loading="lazy"></iframe>
+          <div class="frame"><iframe data-src="apps/original_3.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
         <div class="stack">
           <div class="pane" data-label="Redesign (assets)">
             <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
               <button class="max" title="Maximize">⤢</button>
               <a class="open" href="apps/final_3/index.html" target="_blank" rel="noopener">↗</a></div>
-            <iframe data-src="apps/final_3/index.html" loading="lazy"></iframe>
+            <div class="frame"><iframe data-src="apps/final_3/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
           </div>
           <div class="pane" data-label="Primitive redesign">
             <div class="pane-head"><span class="dot prim"></span>Primitive redesign
               <button class="max" title="Maximize">⤢</button>
               <a class="open" href="apps/prim_3/index.html" target="_blank" rel="noopener">↗</a></div>
-            <iframe data-src="apps/prim_3/index.html" loading="lazy"></iframe>
+            <div class="frame"><iframe data-src="apps/prim_3/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
           </div>
         </div>
       </div>
@@ -163,20 +172,20 @@ style: Pixar style 3D cartoon, smooth textures, not realistic, high quality rend
           <div class="pane-head"><span class="dot orig"></span>Original
             <button class="max" title="Maximize">⤢</button>
             <a class="open" href="apps/original_4.html" target="_blank" rel="noopener">↗</a></div>
-          <iframe data-src="apps/original_4.html" loading="lazy"></iframe>
+          <div class="frame"><iframe data-src="apps/original_4.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
         <div class="stack">
           <div class="pane" data-label="Redesign (assets)">
             <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
               <button class="max" title="Maximize">⤢</button>
               <a class="open" href="apps/final_4/index.html" target="_blank" rel="noopener">↗</a></div>
-            <iframe data-src="apps/final_4/index.html" loading="lazy"></iframe>
+            <div class="frame"><iframe data-src="apps/final_4/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
           </div>
           <div class="pane" data-label="Primitive redesign">
             <div class="pane-head"><span class="dot prim"></span>Primitive redesign
               <button class="max" title="Maximize">⤢</button>
               <a class="open" href="apps/prim_4/index.html" target="_blank" rel="noopener">↗</a></div>
-            <iframe data-src="apps/prim_4/index.html" loading="lazy"></iframe>
+            <div class="frame"><iframe data-src="apps/prim_4/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
           </div>
         </div>
       </div>
@@ -195,33 +204,49 @@ style: Pixar style 3D cartoon, smooth textures, not realistic, high quality rend
           <div class="pane-head"><span class="dot orig"></span>Original
             <button class="max" title="Maximize">⤢</button>
             <a class="open" href="apps/original_5.html" target="_blank" rel="noopener">↗</a></div>
-          <iframe data-src="apps/original_5.html" loading="lazy"></iframe>
+          <div class="frame"><iframe data-src="apps/original_5.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
         <div class="stack">
           <div class="pane" data-label="Redesign (assets)">
             <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
               <button class="max" title="Maximize">⤢</button>
               <a class="open" href="apps/final_5/index.html" target="_blank" rel="noopener">↗</a></div>
-            <iframe data-src="apps/final_5/index.html" loading="lazy"></iframe>
+            <div class="frame"><iframe data-src="apps/final_5/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
           </div>
           <div class="pane" data-label="Primitive redesign">
             <div class="pane-head"><span class="dot prim"></span>Primitive redesign
               <button class="max" title="Maximize">⤢</button>
               <a class="open" href="apps/prim_5/index.html" target="_blank" rel="noopener">↗</a></div>
-            <iframe data-src="apps/prim_5/index.html" loading="lazy"></iframe>
+            <div class="frame"><iframe data-src="apps/prim_5/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
           </div>
         </div>
       </div>
     </section>
   </main>
 <script>
-  function load(p){p.querySelectorAll('iframe[data-src]').forEach(f=>{f.src=f.dataset.src;f.removeAttribute('data-src');});}
+  function runFrame(frame){
+    const f=frame.querySelector('iframe');
+    if(f.dataset.src){ f.src=f.dataset.src; f.removeAttribute('data-src'); }
+    frame.classList.add('running');
+  }
+  function stopAll(panel){
+    panel.querySelectorAll('.frame.running').forEach(frame=>{
+      const f=frame.querySelector('iframe');
+      if(f.src){ f.dataset.src=f.src; f.removeAttribute('src'); }
+      frame.classList.remove('running');
+    });
+  }
+  document.querySelectorAll('.play').forEach(btn=>{
+    btn.addEventListener('click',()=>runFrame(btn.closest('.frame')));
+  });
   document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
     unzoom();
     const n=tab.dataset.n;
     document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t===tab));
     document.querySelectorAll('.panel').forEach(p=>{
-      const on=p.dataset.n===n; p.classList.toggle('active',on); if(on) load(p);
+      const on=p.dataset.n===n;
+      if(!on && p.classList.contains('active')) stopAll(p);
+      p.classList.toggle('active',on);
     });
     window.scrollTo({top:0,behavior:'smooth'});
   }));
@@ -242,7 +267,7 @@ style: Pixar style 3D cartoon, smooth textures, not realistic, high quality rend
     if(!on){ pane.classList.add('zoomed'); document.body.classList.add('zoom'); btn.textContent='⤡'; }
   }));
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') unzoom(); });
-  load(document.querySelector('.panel.active'));
+
 </script>
 </body>
 </html>
