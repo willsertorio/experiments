@@ -1,403 +1,872 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<title>Halo Ring — Procedural Three.js</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="./support.js"></script>
-<style>[data-viewer-hidden]{display:none !important;}</style>
+<style>
+  html,body{margin:0;height:100%;background:#0b0c0e;overflow:hidden;font-family:system-ui}
+  #c{position:fixed;inset:0;display:block;width:100%;height:100%}
+  #hint{position:fixed;left:12px;bottom:10px;color:#fff;opacity:.35;font:11px/1.4 system-ui;letter-spacing:.05em;pointer-events:none}
+  #err{position:fixed;inset:0;display:none;place-items:center;color:#eee;font:14px system-ui;background:#101114;text-align:center;padding:40px;white-space:pre-wrap}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1c1e22;color:#e8eaee;font:12px system-ui;padding:8px 14px;border-radius:6px;opacity:0;transition:opacity .25s;pointer-events:none;border:1px solid #33363c;z-index:20}
+  .lil-gui.root{--width:326px;--background-color:#0f1013;--title-background-color:#16171b;--widget-color:#1d1f24;--hover-color:#24262c;--focus-color:#2a2d34;--number-color:#8ab4ff;--string-color:#a5d6a7;--font-size:11px;--input-font-size:11px;max-height:calc(100vh - 16px)}
+  .lil-gui.root>.children{max-height:calc(100vh - 42px);overflow-y:auto;scrollbar-width:thin}
+</style>
 </head>
 <body>
-<x-dc>
-<helmet>
-<style>
-  html,body{margin:0;padding:0;height:100%;background:#eceef1;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;}
-  a{color:#3a6ea5;} a:hover{color:#28527a;}
-  canvas{display:block;}
-</style>
-<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-</helmet>
-<div style="position:fixed;inset:0;background:radial-gradient(120% 120% at 50% 18%, #f6f8fa 0%, #dfe3e7 62%, #cbd0d5 100%);">
-  <div ref="{{ setHost }}" style="position:absolute;inset:0;"></div>
-
-  <div style="position:absolute;top:22px;left:26px;pointer-events:none;user-select:none;">
-    <div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#8a9099;font-weight:600;">Jewelry Study · 01</div>
-    <div style="font-size:23px;letter-spacing:-0.01em;color:#3a4048;font-weight:600;margin-top:4px;">Cushion Halo Ring</div>
-    <div style="font-size:12.5px;color:#9aa0a8;margin-top:3px;">Cushion-cut center · 18-stone halo · pavé shank</div>
-  </div>
-
-  <div data-viewer-hidden style="position:absolute;top:22px;right:22px;width:236px;background:rgba(255,255,255,0.72);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.9);border-radius:16px;box-shadow:0 8px 28px rgba(50,60,72,0.14);padding:16px 16px 18px;font-size:12px;color:#4a5058;">
-    <div style="font-size:10.5px;letter-spacing:0.2em;text-transform:uppercase;color:#9aa0a8;font-weight:700;margin-bottom:12px;">Configure</div>
-
-    <div style="font-size:11px;font-weight:600;color:#7a818a;margin-bottom:7px;">Finish</div>
-    <div style="display:flex;gap:6px;background:#e9ebee;border-radius:10px;padding:3px;margin-bottom:16px;">
-      <button onClick="{{ setClay }}" style="{{ clayBtnStyle }}">Clay</button>
-      <button onClick="{{ setPolished }}" style="{{ polishedBtnStyle }}">Polished</button>
-    </div>
-
-    <div style="font-size:11px;font-weight:600;color:#7a818a;margin-bottom:9px;">Center stone</div>
-    <div style="display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:10px;">{{ gemSwatches }}</div>
-    <label style="display:flex;align-items:center;gap:9px;margin-bottom:16px;cursor:pointer;color:#8a9099;">
-      <input type="color" value="{{ gemColor }}" onInput="{{ onGemInput }}" style="width:30px;height:24px;border:none;background:none;padding:0;cursor:pointer;border-radius:6px;">
-      <span>Custom color</span>
-    </label>
-
-    <div style="font-size:11px;font-weight:600;color:#7a818a;margin-bottom:9px;">Metal</div>
-    <div style="display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:10px;">{{ metalSwatches }}</div>
-    <label style="display:flex;align-items:center;gap:9px;margin-bottom:16px;cursor:pointer;color:#8a9099;">
-      <input type="color" value="{{ metalColor }}" onInput="{{ onMetalInput }}" style="width:30px;height:24px;border:none;background:none;padding:0;cursor:pointer;border-radius:6px;">
-      <span>Custom color</span>
-    </label>
-
-    <div style="height:1px;background:rgba(120,130,140,0.14);margin:0 0 13px;"></div>
-
-    <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;cursor:pointer;">
-      <span style="color:#6a717a;">Auto-rotate</span>
-      <input type="checkbox" checked="{{ autoRotate }}" onChange="{{ toggleRotate }}" style="width:16px;height:16px;cursor:pointer;accent-color:#3a4048;">
-    </label>
-    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
-      <span style="color:#6a717a;">Studio grid</span>
-      <input type="checkbox" checked="{{ showGrid }}" onChange="{{ toggleGrid }}" style="width:16px;height:16px;cursor:pointer;accent-color:#3a4048;">
-    </label>
-  </div>
-
-  <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:18px;align-items:center;font-size:12px;color:#8a9099;letter-spacing:0.02em;pointer-events:none;user-select:none;background:rgba(255,255,255,0.55);backdrop-filter:blur(6px);padding:8px 16px;border-radius:999px;box-shadow:0 1px 3px rgba(60,70,80,0.08);">
-    <span>Drag&nbsp;·&nbsp;orbit</span>
-    <span style="opacity:0.4;">|</span>
-    <span>Scroll&nbsp;·&nbsp;zoom</span>
-    <span style="opacity:0.4;">|</span>
-    <span>Right-drag&nbsp;·&nbsp;pan</span>
-  </div>
+<div id="root">
+<canvas id="c"></canvas>
+<div id="hint">drag — orbit &nbsp;·&nbsp; scroll — zoom &nbsp;·&nbsp; panel — explore</div>
+<div id="err"></div>
+<div id="toast"></div>
 </div>
-</x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;materialMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Clay&quot;,&quot;Polished&quot;],&quot;default&quot;:&quot;Clay&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Render&quot;},&quot;autoRotate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Render&quot;},&quot;showGrid&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Render&quot;},&quot;metalColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#8afffd&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Materials&quot;},&quot;gemColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#474eff&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Materials&quot;}}">
-class Component extends DCLogic {
-  state = {};
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+<script>window.addEventListener('error',function(e){if(window.__ok)return;var d=document.getElementById('err');if(d){d.style.display='grid';d.textContent='Failed to start.\nRequires WebGL2 and network access to cdn.jsdelivr.net.\n\n'+(e.message||e.type);}},true);</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import Stats from 'three/addons/libs/stats.module.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
-  _val(k, d) {
-    if (this.state && this.state[k] !== undefined) return this.state[k];
-    return this._p(k, d);
-  }
-  _set(k, v) { this.setState({ [k]: v }); }
+const rad = THREE.MathUtils.degToRad;
+const lerp = THREE.MathUtils.lerp;
 
-  renderVals() {
-    const mode = this._val('materialMode', 'Clay');
-    const autoRotate = this._val('autoRotate', true);
-    const showGrid = this._val('showGrid', true);
-    const metalColor = this._val('metalColor', '#bfc5cc');
-    const gemColor = this._val('gemColor', '#aac3e2');
+/* ============================== PARAMETERS ============================== */
+const P = {
+  stone: { diameter:6.5, table:0.57, crown:0.15, pavilion:0.435, girdle:0.03, star:0.5, lower:0.8, mains:8 },
+  head:  { haloCount:20, haloGem:1.35, haloGap:0.25, haloTilt:8, rim:0.6, lift:2.7, stoneLift:0.75,
+           basketDrop:1.15, prongs:4, prongDia:0.66, prongFlare:0.05, beads:true },
+  band:  { innerR:8.45, width:1.85, thick:1.68, square:3.4, taper:0.16, segs:180,
+           paveCount:13, paveSize:1.12, paveStart:15, paveEnd:115, paveInset:0.10, paveBeads:true, beadSize:0.36 },
+  metal: { color:'#e9edf2', metalness:1.0, roughness:0.16, envInt:1.2, clearcoat:0.0, ccRough:0.25,
+           reflectivity:0.5, specInt:1.0, specColor:'#ffffff', sheen:0.0, sheenRough:0.5, sheenColor:'#ffffff' },
+  gemMode: 'Custom shader',
+  gemPhys: { transmission:1.0, roughness:0.0, ior:2.417, thickness:4.5, dispersion:0.4,
+             attColor:'#ffffff', attDist:12, clearcoat:0.3, envInt:1.4, specInt:1.0 },
+  gem:   { ior:2.417, dispersion:1.1, fresnel:3.5, bounces:3, sparkle:1.3, fire:0.9, boost:1.35,
+           refl:1.2, tint:'#ffffff', envInt:0.9, rough:0.0 },
+  lights: {
+    key:  { on:true, int:4.0, color:'#ffffff', az:-38, el:52, dist:70, angle:45, pen:0.55,
+            shadow:true, radius:7, blur:14, bias:-0.0002, normalBias:0.02 },
+    fill: { on:true, int:1.1, color:'#eef3ff', az:60, el:14, dist:80, angle:60, pen:0.8 },
+    rim:  { on:true, int:2.6, color:'#ffffff', az:155, el:32, dist:80, angle:55, pen:0.7 }
+  },
+  env:  { int:1.0, rot:0, bright:1.0, contrast:1.1, sparkle:1.0, res:256 },
+  cam:  { fov:32, exposure:1.12, near:1, far:1200, rotate:0 },
+  post: { tone:'ACES', bloom:true, bloomTh:1.0, bloomStr:0.18, bloomRad:0.35,
+          vig:0, vigSoft:0.6, grain:0.045, contrast:1.02, sat:1.0, ca:0.0012,
+          dofOn:true, dofFocus:55, dofAperture:0.0005, dofMaxblur:0.01,
+          scale:Math.min(window.devicePixelRatio||1,2) },
+  scn:  { bgTop:'#ffffff', bgBot:'#ffffff', ground:true, shadowOp:0.38, contact:0.5, contactSize:1.0,
+          phys:false, gColor:'#b7b9bc', gRough:0.65, wire:false, stats:false }
+};
+const DEFAULTS = structuredClone(P);
 
-    const metalPresets = [
-      { name: 'Platinum', color: '#cfd4da' },
-      { name: 'White gold', color: '#e9e6da' },
-      { name: 'Yellow gold', color: '#e6c15a' },
-      { name: 'Rose gold', color: '#e0a891' }
-    ];
-    const gemPresets = [
-      { name: 'Diamond', color: '#dbe6f2' },
-      { name: 'Sapphire', color: '#2f5fd0' },
-      { name: 'Emerald', color: '#1f9e6b' },
-      { name: 'Ruby', color: '#d0263f' },
-      { name: 'Amethyst', color: '#8a5cd6' },
-      { name: 'Morganite', color: '#e7a6a0' }
-    ];
-    const swatchEls = (presets, current, key) => presets.map((p) => {
-      const active = current.toLowerCase() === p.color.toLowerCase();
-      return React.createElement('button', {
-        key: p.color,
-        title: p.name,
-        onClick: () => this._set(key, p.color),
-        style: {
-          width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', padding: 0,
-          background: p.color,
-          border: active ? '2px solid #3a4048' : '2px solid rgba(255,255,255,0.85)',
-          boxShadow: active ? '0 0 0 1.5px #3a4048, 0 1px 2px rgba(0,0,0,0.15)' : '0 1px 2px rgba(0,0,0,0.18)',
-          outline: 'none', transition: 'transform .12s', transform: active ? 'scale(1.08)' : 'scale(1)'
-        }
-      });
-    });
+/* ============================== RENDERER ============================== */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(P.post.scale);
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = P.cam.exposure;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap;
 
-    return {
-      setHost: (el) => { if (el && el !== this.host) { this.host = el; this._init(); } },
-      mode, autoRotate, showGrid, metalColor, gemColor,
-      isClay: mode === 'Clay', isPolished: mode === 'Polished',
-      clayBtnStyle: this._segStyle(mode === 'Clay'),
-      polishedBtnStyle: this._segStyle(mode === 'Polished'),
-      setClay: () => this._set('materialMode', 'Clay'),
-      setPolished: () => this._set('materialMode', 'Polished'),
-      toggleRotate: () => this._set('autoRotate', !autoRotate),
-      toggleGrid: () => this._set('showGrid', !showGrid),
-      onMetalInput: (e) => this._set('metalColor', e.target.value),
-      onGemInput: (e) => this._set('gemColor', e.target.value),
-      metalSwatches: swatchEls(metalPresets, metalColor, 'metalColor'),
-      gemSwatches: swatchEls(gemPresets, gemColor, 'gemColor')
-    };
-  }
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(P.cam.fov, innerWidth/innerHeight, P.cam.near, P.cam.far);
+camera.position.set(15.5, 26.5, 51.5);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 12.5, 0);
+controls.enableDamping = true; controls.dampingFactor = 0.07;
+controls.minDistance = 6; controls.maxDistance = 300;
+controls.maxPolarAngle = Math.PI*0.62;
 
-  _segStyle(active) {
-    return 'flex:1;border:none;cursor:pointer;padding:7px 0;border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;'
-      + (active
-        ? 'background:#ffffff;color:#3a4048;box-shadow:0 1px 3px rgba(50,60,72,0.18);'
-        : 'background:transparent;color:#8a9099;');
-  }
+const stats = new Stats();
+stats.dom.style.cssText = 'position:fixed;top:0;left:0;display:none;z-index:30';
+document.body.appendChild(stats.dom);
 
-  componentDidUpdate() { this._applyProps(); }
+/* ============================== PROCEDURAL STUDIO ENVIRONMENT ============================== */
+let seed = 7;
+const rnd = () => { seed|=0; seed = seed+0x6D2B79F5|0; let t = Math.imul(seed^seed>>>15, 1|seed);
+  t = t+Math.imul(t^t>>>7, 61|t)^t; return ((t^t>>>14)>>>0)/4294967296; };
 
-  componentWillUnmount() {
-    cancelAnimationFrame(this._raf);
-    clearTimeout(this._t);
-    window.removeEventListener('resize', this._onResize);
-    if (this.renderer) this.renderer.dispose();
-  }
+const envScene = new THREE.Scene();
+const domeU = { uTop:{value:new THREE.Color(0.95,0.96,0.985)}, uBot:{value:new THREE.Color(0.09,0.09,0.1)},
+                uBright:{value:1}, uContrast:{value:1} };
+envScene.add(new THREE.Mesh(new THREE.SphereGeometry(300,32,24), new THREE.ShaderMaterial({
+  side:THREE.BackSide, depthWrite:false, uniforms:domeU,
+  vertexShader:'varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader:'varying vec3 vP; uniform vec3 uTop,uBot; uniform float uBright,uContrast;\n'+
+    'void main(){ float h=normalize(vP).y*0.5+0.5; vec3 c=mix(uBot,uTop,smoothstep(0.25,0.9,h));\n'+
+    'c=pow(c,vec3(uContrast))*uBright; gl_FragColor=vec4(c,1.0); }'
+})));
 
-  _p(k, d) { const v = this.props ? this.props[k] : undefined; return (v === undefined || v === null) ? d : v; }
-
-  _init() {
-    const THREE = window.THREE;
-    if (!this.host || !THREE || !THREE.OrbitControls) { this._t = setTimeout(() => this._init(), 60); return; }
-    if (this._built) return;
-    this._built = true;
-    this.THREE = THREE;
-
-    const host = this.host;
-    const W = host.clientWidth || window.innerWidth;
-    const H = host.clientHeight || window.innerHeight;
-
-    const scene = new THREE.Scene();
-    this.scene = scene;
-
-    const camera = new THREE.PerspectiveCamera(34, W / H, 0.1, 100);
-    camera.position.set(0.55, 1.35, 4.15);
-    this.camera = camera;
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(W, H);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.82;
-    host.appendChild(renderer.domElement);
-    this.renderer = renderer;
-
-    // Studio environment (equirect gradient -> PMREM) for reflections & refraction
-    const envTex = this._makeEnvTexture(THREE);
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromEquirectangular(envTex).texture;
-    envTex.dispose();
-    pmrem.dispose();
-
-    // Lights
-    const hemi = new THREE.HemisphereLight(0xffffff, 0xb2bac2, 0.32);
-    scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffffff, 1.45);
-    key.position.set(3.5, 6, 4);
-    key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.camera.near = 1; key.shadow.camera.far = 20;
-    key.shadow.camera.left = -4; key.shadow.camera.right = 4;
-    key.shadow.camera.top = 4; key.shadow.camera.bottom = -4;
-    key.shadow.bias = -0.0004;
-    key.shadow.radius = 6;
-    scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
-    fill.position.set(-4, 2, -2);
-    scene.add(fill);
-
-    // ---- Materials ----
-    this.metalMat = new THREE.MeshStandardMaterial({ color: 0xbfc5cc, metalness: 0.1, roughness: 0.78, flatShading: true, envMapIntensity: 0.6 });
-    this.gemClay = new THREE.MeshStandardMaterial({ color: 0xaac3e2, metalness: 0.0, roughness: 0.45, flatShading: true, side: THREE.DoubleSide, envMapIntensity: 0.55 });
-    this.gemGlass = new THREE.MeshPhysicalMaterial({ color: 0xaac3e2, metalness: 0, roughness: 0.06, transmission: 0.35, thickness: 1.2, attenuationDistance: 0.6, ior: 2.2, transparent: true, side: THREE.DoubleSide, envMapIntensity: 2.0, clearcoat: 1.0, clearcoatRoughness: 0.02 });
-
-    const R = 1.0, r = 0.15;         // band radius, tube
-    const headY = R + 0.05;
-
-    // Root group holding the ring; tilted so the stone faces up-and-toward the viewer
-    const root = new THREE.Group();
-    root.rotation.x = 0.52;
-    scene.add(root);
-
-    // ---- Band (torus, XY plane, axis Z) ----
-    const band = new THREE.Mesh(new THREE.TorusGeometry(R, r, 12, 72), this.metalMat);
-    band.castShadow = true; band.receiveShadow = true;
-    // taper: flatten tube a touch to read like a shank
-    band.scale.set(1, 1, 0.82);
-    root.add(band);
-
-    // ---- Pavé stones along the shank ----
-    const stoneGeo = new THREE.BoxGeometry(0.11, 0.1, 0.12);
-    const N = 40;
-    for (let i = 0; i < N; i++) {
-      const phi = (i / N) * Math.PI * 2;
-      // skip the top zone where the head sits (~90deg)
-      const deg = phi * 180 / Math.PI;
-      if (deg > 66 && deg < 114) continue;
-      const s = new THREE.Mesh(stoneGeo, this.metalMat);
-      const rad = R + r * 0.55;
-      s.position.set(Math.cos(phi) * rad, Math.sin(phi) * rad, 0);
-      s.rotation.z = phi;
-      s.castShadow = true;
-      root.add(s);
-    }
-
-    // ---- Head group (at top of band) ----
-    const head = new THREE.Group();
-    head.position.set(0, headY, 0);
-    root.add(head);
-
-    // basket / seat under the gem
-    const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.2, 0.34, 8, 1, true), this.metalMat);
-    basket.position.y = -0.12; basket.castShadow = true;
-    head.add(basket);
-
-    // ---- Gem (cushion cut, table +Y) ----
-    const gwr = 0.4, twr = 0.22, ch = 0.17, pd = 0.44;
-    this.gemMesh = new THREE.Mesh(this._makeGem(THREE, gwr, twr, ch, pd), this.gemClay);
-    this.gemMesh.position.y = 0.16;
-    this.gemMesh.castShadow = true;
-    head.add(this.gemMesh);
-
-    // ---- Halo of small stones around the gem ----
-    const haloGeo = new THREE.BoxGeometry(0.12, 0.15, 0.11);
-    const HN = 18, rh = gwr + 0.13;
-    for (let i = 0; i < HN; i++) {
-      const a = (i / HN) * Math.PI * 2 + Math.PI / HN;
-      const s = new THREE.Mesh(haloGeo, this.metalMat);
-      s.position.set(Math.cos(a) * rh, 0.2, Math.sin(a) * rh);
-      s.rotation.y = -a;
-      s.rotation.x = 0.35 * Math.sin(0); // stand upright
-      s.castShadow = true;
-      head.add(s);
-    }
-
-    // ---- 4 corner prongs gripping the gem ----
-    const prongGeo = new THREE.BoxGeometry(0.11, 0.46, 0.11);
-    for (let i = 0; i < 4; i++) {
-      const a = Math.PI / 4 + i * Math.PI / 2;
-      const g = new THREE.Group();
-      const rad = gwr + 0.06;
-      g.position.set(Math.cos(a) * rad, 0.22, Math.sin(a) * rad);
-      g.rotation.y = -a + Math.PI / 2;
-      g.rotation.x = -0.5; // lean over the crown
-      const claw = new THREE.Mesh(prongGeo, this.metalMat);
-      claw.castShadow = true;
-      g.add(claw);
-      head.add(g);
-    }
-
-    // ---- Ground + shadow + grid ----
-    const groundY = -(R + r * 0.82) - 0.03;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.34 }));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = groundY;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    this.grid = new THREE.GridHelper(40, 80, 0xbfc4c9, 0xd6dade);
-    this.grid.position.y = groundY + 0.001;
-    this.grid.material.opacity = 0.55; this.grid.material.transparent = true;
-    scene.add(this.grid);
-
-    // ---- Controls ----
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.target.set(0, 0.5, 0.1);
-    controls.minDistance = 1.8;
-    controls.maxDistance = 8;
-    controls.maxPolarAngle = Math.PI * 0.95;
-    controls.autoRotateSpeed = 1.4;
-    this.controls = controls;
-
-    this._onResize = () => {
-      const w = host.clientWidth || window.innerWidth, h = host.clientHeight || window.innerHeight;
-      camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
-    };
-    window.addEventListener('resize', this._onResize);
-
-    this._applyProps();
-
-    const loop = () => { this._raf = requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); };
-    loop();
-  }
-
-  _applyProps() {
-    if (!this._built || !this.metalMat) return;
-    const THREE = this.THREE;
-    const mode = this._val('materialMode', 'Clay');
-    const polished = mode === 'Polished';
-
-    this.metalMat.metalness = polished ? 1.0 : 0.12;
-    this.metalMat.roughness = polished ? 0.26 : 0.82;
-    this.metalMat.envMapIntensity = polished ? 1.6 : 0.6;
-    this.metalMat.color.set(this._val('metalColor', '#bfc5cc'));
-    this.metalMat.needsUpdate = true;
-
-    const gc = this._val('gemColor', '#aac3e2');
-    this.gemClay.color.set(gc);
-    this.gemGlass.color.set(gc);
-    const att = this.gemGlass.attenuationColor || this.gemGlass.attenuationTint;
-    if (att) att.set(gc);
-    this.gemMesh.material = polished ? this.gemGlass : this.gemClay;
-
-    if (this.controls) this.controls.autoRotate = !!this._val('autoRotate', true);
-    if (this.grid) this.grid.visible = !!this._val('showGrid', true);
-    if (this.renderer) this.renderer.toneMappingExposure = polished ? 0.78 : 0.82;
-  }
-
-  _makeGem(THREE, gwr, twr, ch, pd) {
-    const S = 8, verts = [];
-    const oct = (rad, y) => {
-      const pts = [];
-      for (let i = 0; i < S; i++) {
-        const a = (i / S) * Math.PI * 2 + Math.PI / S;
-        pts.push([Math.cos(a) * rad, y, Math.sin(a) * rad]);
-      }
-      return pts;
-    };
-    const girdle = oct(gwr, 0);
-    const table = oct(twr, ch);
-    const push = (p) => { verts.push(p[0], p[1], p[2]); };
-    const tri = (a, b, c) => { push(a); push(b); push(c); };
-    const topC = [0, ch, 0], culet = [0, -pd, 0];
-    for (let i = 0; i < S; i++) {
-      const j = (i + 1) % S;
-      // table facets
-      tri(topC, table[i], table[j]);
-      // crown quad (girdle -> table)
-      tri(girdle[i], girdle[j], table[j]);
-      tri(girdle[i], table[j], table[i]);
-      // pavilion
-      tri(culet, girdle[j], girdle[i]);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    geo.computeVertexNormals();
-    return geo;
-  }
-
-  _makeEnvTexture(THREE) {
-    const c = document.createElement('canvas');
-    c.width = 512; c.height = 256;
-    const g = c.getContext('2d');
-    const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, '#ffffff');
-    grad.addColorStop(0.45, '#eef1f4');
-    grad.addColorStop(0.55, '#d7dde2');
-    grad.addColorStop(1, '#aeb6bd');
-    g.fillStyle = grad; g.fillRect(0, 0, 512, 256);
-    // soft light blobs
-    g.globalAlpha = 0.5;
-    g.fillStyle = '#ffffff';
-    g.beginPath(); g.ellipse(140, 70, 90, 40, 0, 0, 7); g.fill();
-    g.beginPath(); g.ellipse(380, 90, 70, 30, 0, 0, 7); g.fill();
-    g.globalAlpha = 1;
-    const tex = new THREE.CanvasTexture(c);
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    return tex;
-  }
+const SB = []; // softboxes {mesh, base}
+function softbox(w,h,az,el,dist,base){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({ side:THREE.DoubleSide }));
+  const ce = Math.cos(rad(el));
+  m.position.set(dist*ce*Math.sin(rad(az)), dist*Math.sin(rad(el)), dist*ce*Math.cos(rad(az)));
+  m.lookAt(0,0,0);
+  envScene.add(m); SB.push({ m, base });
+  return m;
 }
+softbox( 60, 80, -40, 45,  95, 14);   // key softbox
+softbox(170, 22,   0, 86,  95, 10);   // overhead strip
+softbox( 70, 60,  62, 12, 105, 3.2);  // fill panel
+softbox( 30, 95, 160, 30, 105, 9);    // rim strip
+softbox( 90, 60, 112, -4,  85, 0.02); // negative fill card
+softbox( 90, 60,-135, -8,  85, 0.02); // negative fill card
+
+const sparkGroup = new THREE.Group(); envScene.add(sparkGroup);
+const sparkMats = [];
+for (let i=0;i<26;i++){
+  const m = new THREE.MeshBasicMaterial();
+  const s = new THREE.Mesh(new THREE.SphereGeometry(1.1+rnd()*1.2, 8, 6), m);
+  const az = rnd()*Math.PI*2, el = rad(-12+rnd()*85), d = 55+rnd()*40;
+  s.position.set(d*Math.cos(el)*Math.sin(az), d*Math.sin(el), d*Math.cos(el)*Math.cos(az));
+  sparkMats.push({ m, hue:rnd(), base:35+rnd()*45 });
+  sparkGroup.add(s);
+}
+sparkGroup.visible = false;
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+let envRT = null, cubeRT = null, cubeCam = null;
+function makeCube(res){
+  if (cubeRT) cubeRT.dispose();
+  cubeRT = new THREE.WebGLCubeRenderTarget(res, { type:THREE.HalfFloatType, generateMipmaps:true, minFilter:THREE.LinearMipmapLinearFilter });
+  cubeCam = new THREE.CubeCamera(0.5, 700, cubeRT);
+  cubeCam.position.set(0, 14, 0);
+}
+makeCube(P.env.res);
+
+function rebakeEnv(){
+  domeU.uBright.value = P.env.bright; domeU.uContrast.value = P.env.contrast;
+  SB.forEach(({m,base}) => m.material.color.setScalar(20*Math.pow(base/20, P.env.contrast)*P.env.bright));
+  sparkGroup.visible = false;
+  if (envRT) envRT.dispose();
+  envRT = pmrem.fromScene(envScene, 0.035);
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = P.env.int;
+  scene.environmentRotation.y = rad(P.env.rot);
+  // gem cube: same studio + HDR sparkle points for scintillation
+  if (P.env.sparkle > 0.001){
+    sparkGroup.visible = true;
+    sparkMats.forEach(({m,hue,base}) => m.color.setHSL(hue, 0.06, 0.58).multiplyScalar(base*P.env.sparkle*P.env.bright));
+  }
+  cubeCam.update(renderer, envScene);
+  sparkGroup.visible = false;
+  gemU.uEnv.value = cubeRT.texture;
+  gemU.uRot.value = rad(P.env.rot);
+}
+
+/* ============================== MATERIALS ============================== */
+const metalMat = new THREE.MeshPhysicalMaterial({ metalness:1, roughness:0.16 });
+const gemPhys = new THREE.MeshPhysicalMaterial({ metalness:0, transmission:1, roughness:0, ior:2.417, thickness:4.5 });
+
+const gemU = {
+  uEnv:{value:null}, uIor:{value:2.417}, uDisp:{value:0.55}, uFres:{value:4}, uBounce:{value:3},
+  uSpark:{value:1.1}, uFire:{value:0.4}, uBoost:{value:1.25}, uRefl:{value:1}, uRot:{value:0},
+  uInt:{value:1}, uRough:{value:0}, uTint:{value:new THREE.Color('#ffffff')}
+};
+const gemShader = new THREE.ShaderMaterial({
+  uniforms: gemU,
+  vertexShader: `
+    varying vec3 vW; varying vec3 vN;
+    void main(){
+      vec3 p = position; vec3 n = normal;
+      #ifdef USE_INSTANCING
+        p = (instanceMatrix * vec4(p,1.0)).xyz;
+        n = mat3(instanceMatrix) * n;
+      #endif
+      vec4 w = modelMatrix * vec4(p,1.0);
+      vW = w.xyz;
+      vN = normalize(mat3(modelMatrix) * n);
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: `
+    uniform samplerCube uEnv;
+    uniform float uIor,uDisp,uFres,uSpark,uFire,uBoost,uRefl,uRot,uInt,uRough;
+    uniform int uBounce;
+    uniform vec3 uTint;
+    varying vec3 vW; varying vec3 vN;
+    vec3 rotY(vec3 d, float a){ float c=cos(a),s=sin(a); return vec3(c*d.x+s*d.z, d.y, -s*d.x+c*d.z); }
+    vec3 env(vec3 d, float l){ return textureCubeLodEXT(uEnv, rotY(d,uRot), l).rgb; }
+    void main(){
+      vec3 V = normalize(vW - cameraPosition);
+      vec3 N = normalize(vN);
+      float lod = uRough*5.0;
+      float c0 = clamp(dot(N,-V), 0.0, 1.0);
+      float F0 = pow((uIor-1.0)/(uIor+1.0), 2.0);
+      float F = F0 + (1.0-F0)*pow(1.0-c0, uFres);
+      vec3 refl = env(reflect(V,N), lod);
+      vec3 B[4];
+      B[0]=vec3( 0.62, 0.22,-0.45); B[1]=vec3(-0.45, 0.38, 0.55);
+      B[2]=vec3( 0.31,-0.58, 0.42); B[3]=vec3(-0.52,-0.16,-0.60);
+      vec3 body = vec3(0.0);
+      for (int c=0;c<3;c++){
+        float eta = 1.0/(uIor + uDisp*0.08*(float(c)-1.0));
+        vec3 T = refract(V, N, eta);
+        if (dot(T,T) < 1e-5) T = reflect(V,N);
+        vec3 acc = env(T, lod+1.0); float wsum = 1.0;
+        vec3 d = T; float w = uSpark;
+        for (int b=0;b<4;b++){
+          if (b >= uBounce) break;
+          d = normalize(reflect(d, normalize(N*0.9 + B[b])));
+          acc += env(d, lod+1.0)*w; wsum += w; w *= 0.75;
+        }
+        body[c] = acc[c]/wsum;
+      }
+      float lum = dot(body, vec3(0.3333));
+      body = max(vec3(0.0), lum + (body-lum)*(1.0+uFire));
+      body = pow(body, vec3(uBoost));
+      vec3 col = body*uTint*(1.0-F) + refl*clamp(F,0.0,1.0)*uRefl;
+      gl_FragColor = vec4(col*uInt, 1.0);
+    }`
+});
+
+function updateMaterials(){
+  const m = P.metal;
+  metalMat.color.set(m.color); metalMat.metalness = m.metalness; metalMat.roughness = m.roughness;
+  metalMat.envMapIntensity = m.envInt; metalMat.clearcoat = m.clearcoat; metalMat.clearcoatRoughness = m.ccRough;
+  metalMat.reflectivity = m.reflectivity; metalMat.specularIntensity = m.specInt; metalMat.specularColor.set(m.specColor);
+  metalMat.sheen = m.sheen; metalMat.sheenRoughness = m.sheenRough; metalMat.sheenColor.set(m.sheenColor);
+  const gp = P.gemPhys;
+  gemPhys.transmission = gp.transmission; gemPhys.roughness = gp.roughness; gemPhys.ior = gp.ior;
+  gemPhys.thickness = gp.thickness; gemPhys.dispersion = gp.dispersion;
+  gemPhys.attenuationColor.set(gp.attColor); gemPhys.attenuationDistance = Math.max(0.1, gp.attDist);
+  gemPhys.clearcoat = gp.clearcoat; gemPhys.envMapIntensity = gp.envInt; gemPhys.specularIntensity = gp.specInt;
+  const g = P.gem;
+  gemU.uIor.value=g.ior; gemU.uDisp.value=g.dispersion; gemU.uFres.value=g.fresnel;
+  gemU.uBounce.value=Math.round(g.bounces); gemU.uSpark.value=g.sparkle; gemU.uFire.value=g.fire;
+  gemU.uBoost.value=g.boost; gemU.uRefl.value=g.refl; gemU.uInt.value=g.envInt; gemU.uRough.value=g.rough;
+  gemU.uTint.value.set(g.tint);
+  const gm = (P.gemMode === 'Physical (transmission)') ? gemPhys : gemShader;
+  gemSurfaces.forEach(o => o.material = gm);
+  [metalMat, gemPhys, gemShader, groundMat].forEach(x => x.wireframe = P.scn.wire);
+}
+
+/* ============================== GEOMETRY ============================== */
+function brilliantGeo({ r=1, table=0.57, crown=0.15, pavilion=0.435, girdle=0.03, star=0.5, lower=0.8, mains=8 }){
+  const M = Math.max(5, Math.round(mains)), D = 2*r;
+  const yGT = girdle*D/2, yGB = -girdle*D/2;
+  const yT = yGT + crown*D, yC = yGB - pavilion*D;
+  const rt = Math.min(0.95, table)*r;
+  const A = i => i*2*Math.PI/M, H = i => (i+0.5)*2*Math.PI/M;
+  const T=[], S=[], Pv=[], GT=[], GB=[];
+  for (let i=0;i<M;i++){
+    T.push([Math.cos(A(i))*rt, yT, Math.sin(A(i))*rt]);
+    const rs = lerp(rt, r, star);
+    S.push([Math.cos(H(i))*rs, lerp(yT, yGT, star), Math.sin(H(i))*rs]);
+    const rp = Math.max(0.03*r, r*(1 - lower*0.96));
+    Pv.push([Math.cos(H(i))*rp, lerp(yGB, yC, lower), Math.sin(H(i))*rp]);
+  }
+  for (let j=0;j<2*M;j++){
+    const a = j*Math.PI/M;
+    GT.push([Math.cos(a)*r, yGT, Math.sin(a)*r]);
+    GB.push([Math.cos(a)*r, yGB, Math.sin(a)*r]);
+  }
+  const C = [0, yC, 0], ctr = [0, (yT+yC)/2, 0], tris = [];
+  function tri(a,b,c){
+    const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2], vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+    const nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+    const cx=(a[0]+b[0]+c[0])/3-ctr[0], cy=(a[1]+b[1]+c[1])/3-ctr[1], cz=(a[2]+b[2]+c[2])/3-ctr[2];
+    if (nx*cx+ny*cy+nz*cz < 0) tris.push(...a,...c,...b); else tris.push(...a,...b,...c);
+  }
+  for (let i=1;i<M-1;i++) tri(T[0], T[i], T[i+1]);
+  for (let i=0;i<M;i++){
+    const i2=(i+1)%M, im=(i-1+M)%M, j0=2*i, j1=2*i+1, j2=(2*i+2)%(2*M);
+    tri(T[i], T[i2], S[i]);
+    tri(T[i], S[im], GT[j0]); tri(T[i], GT[j0], S[i]);
+    tri(S[i], GT[j0], GT[j1]); tri(S[i], GT[j1], GT[j2]);
+    tri(Pv[i], GB[j0], GB[j1]); tri(Pv[i], GB[j1], GB[j2]);
+    tri(GB[j0], Pv[im], C); tri(GB[j0], C, Pv[i]);
+  }
+  for (let j=0;j<2*M;j++){
+    const j2=(j+1)%(2*M);
+    tri(GT[j], GT[j2], GB[j2]); tri(GT[j], GB[j2], GB[j]);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(tris, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function shankGeo({ innerR, width, thick, square, taper, segs=180, cs=26 }){
+  segs = Math.round(segs);
+  const pos = new Float32Array(segs*cs*3), idx = [];
+  const e = 2/square;
+  const sp = (c,p) => Math.sign(c)*Math.pow(Math.abs(c), p);
+  for (let i=0;i<segs;i++){
+    const th = i/segs*Math.PI*2;
+    const ts = 1 - taper*(0.5+0.5*Math.cos(th));
+    const a = thick/2*ts, b = width/2*ts, Rm = innerR + a;
+    const rx = Math.sin(th), ry = Math.cos(th);
+    for (let j=0;j<cs;j++){
+      const u = j/cs*Math.PI*2;
+      const cx = sp(Math.cos(u), e)*a, cz = sp(Math.sin(u), e)*b;
+      const k = (i*cs+j)*3;
+      pos[k] = rx*(Rm+cx); pos[k+1] = ry*(Rm+cx); pos[k+2] = cz;
+    }
+  }
+  for (let i=0;i<segs;i++) for (let j=0;j<cs;j++){
+    const i2=(i+1)%segs, j2=(j+1)%cs;
+    const a=i*cs+j, b=i2*cs+j, c=i2*cs+j2, d=i*cs+j2;
+    idx.push(a,c,b, a,d,c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
+const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0,1,0);
+function cylBetween(p1, p2, r, capsule){
+  const d = new THREE.Vector3().subVectors(p2, p1), len = d.length();
+  const geo = capsule ? new THREE.CapsuleGeometry(r, len, 4, 12) : new THREE.CylinderGeometry(r, r, len, 14);
+  const mesh = new THREE.Mesh(geo, metalMat);
+  mesh.position.copy(p1).add(p2).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(_up, d.normalize());
+  mesh.castShadow = mesh.receiveShadow = true;
+  return mesh;
+}
+
+const ringGroup = new THREE.Group();
+scene.add(ringGroup);
+let gemSurfaces = [], centerStone = null;
+
+function rebuildRing(){
+  ringGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
+  ringGroup.clear();
+  gemSurfaces = [];
+  const B=P.band, H=P.head, S=P.stone;
+  const gm = (P.gemMode === 'Physical (transmission)') ? gemPhys : gemShader;
+  const sD=S.diameter, sR=sD/2, g=H.haloGem;
+  const cut = { table:S.table, crown:S.crown, pavilion:S.pavilion, girdle:S.girdle, star:S.star, lower:S.lower, mains:S.mains };
+  const ts = t => 1 - B.taper*(0.5+0.5*Math.cos(t));
+  const outerAt = t => B.innerR + B.thick*ts(t);
+
+  // shank
+  const shank = new THREE.Mesh(shankGeo(B), metalMat);
+  shank.castShadow = shank.receiveShadow = true;
+  ringGroup.add(shank);
+
+  // pavé gems + beads on band
+  const melee = brilliantGeo({ r:0.5, ...cut });
+  const nPave = Math.round(B.paveCount);
+  if (nPave > 0){
+    const pave = new THREE.InstancedMesh(melee, gm, nPave*2);
+    pave.castShadow = true;
+    const beadGeo = new THREE.SphereGeometry(1, 10, 8);
+    const beads = B.paveBeads ? new THREE.InstancedMesh(beadGeo, metalMat, nPave*2*4) : null;
+    let bi = 0;
+    for (let side=0; side<2; side++){
+      const sgn = side ? -1 : 1;
+      for (let i=0;i<nPave;i++){
+        const th = sgn * rad(lerp(B.paveStart, B.paveEnd, nPave>1 ? i/(nPave-1) : 0));
+        const rdir = _p.set(Math.sin(th), Math.cos(th), 0).clone();
+        const tdir = new THREE.Vector3(Math.cos(th), -Math.sin(th), 0);
+        _q.setFromUnitVectors(_up, rdir);
+        _m.compose(rdir.clone().multiplyScalar(outerAt(th) - B.paveInset*B.paveSize), _q, _s.setScalar(B.paveSize));
+        pave.setMatrixAt(side*nPave+i, _m);
+        if (beads){
+          const br = B.beadSize*B.paveSize*0.5;
+          for (const [u,v] of [[0.5,0.55],[-0.5,0.55],[0.5,-0.55],[-0.5,-0.55]]){
+            const bp = rdir.clone().multiplyScalar(outerAt(th) - br*0.35)
+              .add(tdir.clone().multiplyScalar(u*B.paveSize))
+              .add(new THREE.Vector3(0,0,v*B.paveSize));
+            _m.compose(bp, _q, _s.setScalar(br));
+            beads.setMatrixAt(bi++, _m);
+          }
+        }
+      }
+    }
+    pave.instanceMatrix.needsUpdate = true;
+    ringGroup.add(pave); gemSurfaces.push(pave);
+    if (beads){ beads.instanceMatrix.needsUpdate = true; beads.castShadow = true; ringGroup.add(beads); }
+  }
+
+  // head
+  const head = new THREE.Group();
+  head.position.y = outerAt(0) + H.lift;
+  ringGroup.add(head);
+  const cirR = sR + H.haloGap + g/2;
+
+  // halo metal: seat torus + under rail
+  const tube = 0.75*g*H.rim;
+  const seat = new THREE.Mesh(new THREE.TorusGeometry(cirR, tube, 18, 72).rotateX(Math.PI/2), metalMat);
+  seat.position.y = -0.18*g - tube*0.8;
+  seat.castShadow = seat.receiveShadow = true;
+  head.add(seat);
+  const under = new THREE.Mesh(new THREE.TorusGeometry(cirR*0.88, 0.28, 12, 60).rotateX(Math.PI/2), metalMat);
+  under.position.y = -1.15*g;
+  under.castShadow = under.receiveShadow = true;
+  head.add(under);
+
+  // halo gems
+  const nH = Math.round(H.haloCount);
+  const haloGems = new THREE.InstancedMesh(melee, gm, nH);
+  haloGems.castShadow = true;
+  const hBeads = H.beads ? new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,8), metalMat, nH*2) : null;
+  for (let i=0;i<nH;i++){
+    const ph = i/nH*Math.PI*2 + Math.PI/nH;
+    const pos = new THREE.Vector3(Math.cos(ph)*cirR, 0.12*g, Math.sin(ph)*cirR);
+    const tan = new THREE.Vector3(-Math.sin(ph), 0, Math.cos(ph));
+    _q.setFromAxisAngle(tan, rad(H.haloTilt));
+    _m.compose(pos, _q, _s.setScalar(g));
+    haloGems.setMatrixAt(i, _m);
+    if (hBeads){
+      const ph2 = (i+0.5)/nH*Math.PI*2 + Math.PI/nH;
+      const br = 0.16*g;
+      [[cirR+0.36*g],[cirR-0.36*g]].forEach(([rr], k) => {
+        _m.compose(new THREE.Vector3(Math.cos(ph2)*rr, 0.14*g, Math.sin(ph2)*rr), _q.identity(), _s.setScalar(br));
+        hBeads.setMatrixAt(i*2+k, _m);
+      });
+    }
+  }
+  haloGems.instanceMatrix.needsUpdate = true;
+  head.add(haloGems); gemSurfaces.push(haloGems);
+  if (hBeads){ hBeads.instanceMatrix.needsUpdate = true; hBeads.castShadow = true; head.add(hBeads); }
+
+  // center stone
+  const stone = new THREE.Mesh(brilliantGeo({ r:sR, ...cut }), gm);
+  stone.position.y = H.stoneLift;
+  stone.castShadow = true;
+  centerStone = stone;
+  head.add(stone); gemSurfaces.push(stone);
+
+  // basket rail + prongs
+  const rail = new THREE.Mesh(new THREE.TorusGeometry(sR*0.62, 0.3, 10, 48).rotateX(Math.PI/2), metalMat);
+  rail.position.y = H.stoneLift - H.basketDrop;
+  rail.castShadow = rail.receiveShadow = true;
+  head.add(rail);
+  const nP = Math.round(H.prongs);
+  const crownTop = H.stoneLift + S.crown*sD*0.7;
+  for (let i=0;i<nP;i++){
+    const ph = (i+0.5)/nP*Math.PI*2;
+    const dir = new THREE.Vector3(Math.cos(ph), 0, Math.sin(ph));
+    const p1 = dir.clone().multiplyScalar(sR*0.72); p1.y = H.stoneLift - H.basketDrop;
+    const p2 = dir.clone().multiplyScalar(sR + H.prongFlare); p2.y = crownTop;
+    head.add(cylBetween(p1, p2, H.prongDia/2, true));
+  }
+
+  // shoulder posts: shank → halo underside
+  const thp = Math.asin(Math.min(0.9, (cirR*0.82)/outerAt(0)));
+  for (const sgn of [1,-1]){
+    const t2 = sgn*thp;
+    const p1 = new THREE.Vector3(Math.sin(t2), Math.cos(t2), 0).multiplyScalar(outerAt(t2) - 0.25);
+    const p2 = new THREE.Vector3(sgn*cirR*0.82, head.position.y - 1.0*g, 0);
+    ringGroup.add(cylBetween(p1, p2, 0.5));
+  }
+
+  ringGroup.position.y = B.innerR + B.thick;
+  ringGroup.rotation.y = -0.55;
+  ringGroup.rotation.x = 0.21;
+}
+
+/* ============================== LIGHTS ============================== */
+function makeSpot(shadow){
+  const l = new THREE.SpotLight(0xffffff, 1);
+  l.decay = 0;
+  l.target.position.set(0, 12, 0);
+  scene.add(l, l.target);
+  if (shadow){
+    l.castShadow = true;
+    l.shadow.mapSize.set(2048, 2048);
+    l.shadow.camera.near = 5; l.shadow.camera.far = 300;
+  }
+  return l;
+}
+const keyL = makeSpot(true), fillL = makeSpot(false), rimL = makeSpot(false);
+
+function placeSpherical(l, c){
+  const ce = Math.cos(rad(c.el));
+  l.position.set(c.dist*ce*Math.sin(rad(c.az)), 12 + c.dist*Math.sin(rad(c.el)), c.dist*ce*Math.cos(rad(c.az)));
+}
+function updateLights(){
+  for (const [l, c] of [[keyL, P.lights.key], [fillL, P.lights.fill], [rimL, P.lights.rim]]){
+    l.visible = c.on; l.intensity = c.int; l.color.set(c.color);
+    l.angle = rad(Math.min(89, c.angle)); l.penumbra = c.pen;
+    placeSpherical(l, c);
+  }
+  const k = P.lights.key;
+  keyL.castShadow = k.shadow;
+  keyL.shadow.radius = k.radius; keyL.shadow.blurSamples = Math.round(k.blur);
+  keyL.shadow.bias = k.bias; keyL.shadow.normalBias = k.normalBias;
+  scene.environmentIntensity = P.env.int;
+  scene.environmentRotation.y = rad(P.env.rot);
+  gemU.uRot.value = rad(P.env.rot);
+}
+
+/* ============================== GROUND / BACKGROUND ============================== */
+const catcher = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI/2), new THREE.ShadowMaterial({ opacity:0.38 }));
+catcher.receiveShadow = true;
+scene.add(catcher);
+
+const groundMat = new THREE.MeshStandardMaterial({ color:'#b7b9bc', roughness:0.65 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(800, 800).rotateX(-Math.PI/2), groundMat);
+ground.position.y = -0.02; ground.receiveShadow = true; ground.visible = false;
+scene.add(ground);
+
+const cvsC = document.createElement('canvas'); cvsC.width = cvsC.height = 256;
+{ const x = cvsC.getContext('2d');
+  const gr = x.createRadialGradient(128,128,8, 128,128,126);
+  gr.addColorStop(0,'rgba(0,0,0,0.8)'); gr.addColorStop(0.5,'rgba(0,0,0,0.28)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+  x.fillStyle = gr; x.fillRect(0,0,256,256); }
+const contact = new THREE.Mesh(new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),
+  new THREE.MeshBasicMaterial({ map:new THREE.CanvasTexture(cvsC), transparent:true, depthWrite:false }));
+contact.position.y = 0.015;
+scene.add(contact);
+
+const bgCvs = document.createElement('canvas'); bgCvs.width = 32; bgCvs.height = 512;
+const bgTex = new THREE.CanvasTexture(bgCvs); bgTex.colorSpace = THREE.SRGBColorSpace;
+function updateScene(){
+  const x = bgCvs.getContext('2d');
+  const gr = x.createLinearGradient(0,0,0,512);
+  gr.addColorStop(0, P.scn.bgTop); gr.addColorStop(1, P.scn.bgBot);
+  x.fillStyle = gr; x.fillRect(0,0,32,512);
+  bgTex.needsUpdate = true;
+  scene.background = bgTex;
+  catcher.visible = P.scn.ground;
+  catcher.material.opacity = P.scn.shadowOp;
+  ground.visible = P.scn.ground && P.scn.phys;
+  groundMat.color.set(P.scn.gColor); groundMat.roughness = P.scn.gRough;
+  contact.visible = P.scn.ground && P.scn.contact > 0.001;
+  contact.material.opacity = P.scn.contact;
+  const w = P.band.innerR + P.band.thick;
+  contact.scale.set(w*1.5*P.scn.contactSize, 1, (P.band.width*3+4)*P.scn.contactSize);
+  stats.dom.style.display = P.scn.stats ? 'block' : 'none';
+  updateMaterials();
+}
+
+/* ============================== POST ============================== */
+const GradeShader = {
+  uniforms: { tDiffuse:{value:null}, uVig:{value:0.35}, uVigSoft:{value:0.6}, uGrain:{value:0.045},
+              uCon:{value:1.02}, uSat:{value:1.0}, uCA:{value:0.0012}, uTime:{value:0} },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uVig,uVigSoft,uGrain,uCon,uSat,uCA,uTime;
+    varying vec2 vUv;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)) + uTime)*43758.5453); }
+    void main(){
+      vec2 d = vUv - 0.5;
+      float r = length(d);
+      vec2 off = d*r*r*uCA*3.0;
+      vec3 col;
+      col.r = texture2D(tDiffuse, vUv+off).r;
+      col.g = texture2D(tDiffuse, vUv).g;
+      col.b = texture2D(tDiffuse, vUv-off).b;
+      col = (col-0.5)*uCon + 0.5;
+      float l = dot(col, vec3(0.2126,0.7152,0.0722));
+      col = mix(vec3(l), col, uSat);
+      float f = smoothstep(1.0-uVigSoft, 1.15, r*1.4142);
+      col *= 1.0 - uVig*f;
+      col += (hash(vUv*913.0)-0.5)*uGrain;
+      gl_FragColor = vec4(col, 1.0);
+    }`
+};
+const composer = new EffectComposer(renderer,
+  new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type:THREE.HalfFloatType, samples:4 }));
+composer.addPass(new RenderPass(scene, camera));
+const bokehPass = new BokehPass(scene, camera, { focus:P.post.dofFocus, aperture:P.post.dofAperture, maxblur:P.post.dofMaxblur });
+composer.addPass(bokehPass);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.25, 0.35, 1.0);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+const gradePass = new ShaderPass(GradeShader);
+composer.addPass(gradePass);
+
+const TONES = { 'None':THREE.NoToneMapping, 'Linear':THREE.LinearToneMapping, 'Reinhard':THREE.ReinhardToneMapping,
+                'Cineon':THREE.CineonToneMapping, 'ACES':THREE.ACESFilmicToneMapping, 'AgX':THREE.AgXToneMapping,
+                'Neutral':THREE.NeutralToneMapping };
+function updatePost(){
+  renderer.toneMapping = TONES[P.post.tone];
+  renderer.toneMappingExposure = P.cam.exposure;
+  bloomPass.enabled = P.post.bloom;
+  bloomPass.threshold = P.post.bloomTh; bloomPass.strength = P.post.bloomStr; bloomPass.radius = P.post.bloomRad;
+  const u = gradePass.uniforms;
+  u.uVig.value = P.post.vig; u.uVigSoft.value = P.post.vigSoft; u.uGrain.value = P.post.grain;
+  u.uCon.value = P.post.contrast; u.uSat.value = P.post.sat; u.uCA.value = P.post.ca;
+  bokehPass.enabled = P.post.dofOn;
+  bokehPass.uniforms.focus.value = P.post.dofFocus;
+  bokehPass.uniforms.aperture.value = P.post.dofAperture;
+  bokehPass.uniforms.maxblur.value = P.post.dofMaxblur;
+  renderer.setPixelRatio(P.post.scale);
+  composer.setPixelRatio(P.post.scale);
+}
+const camInfo = { focal:'42 mm' };
+function updateCamera(){
+  camera.fov = P.cam.fov; camera.near = Math.max(0.01, P.cam.near); camera.far = P.cam.far;
+  camera.updateProjectionMatrix();
+  renderer.toneMappingExposure = P.cam.exposure;
+  controls.autoRotate = Math.abs(P.cam.rotate) > 0.001;
+  controls.autoRotateSpeed = P.cam.rotate;
+  camInfo.focal = (12/Math.tan(rad(P.cam.fov)/2)).toFixed(0) + ' mm';
+  if (focCtl) focCtl.updateDisplay();
+}
+
+/* ============================== GUI ============================== */
+const toastEl = document.getElementById('toast');
+let toastT = 0;
+function toast(msg){ toastEl.textContent = msg; toastEl.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(()=>toastEl.style.opacity=0, 2200); }
+
+const gui = new GUI({ title:'HALO RING — CONTROLS' });
+function bind(f, o, k, mn, mx, st, name, fn){ return f.add(o, k, mn, mx, st).name(name).onChange(fn); }
+const RB = () => rebuildRing() || updateMaterials();
+const UM = updateMaterials, UL = updateLights, UE = rebakeEnv, UP = updatePost, US = updateScene, UC = updateCamera;
+
+const fGeo = gui.addFolder('Geometry');
+const fStone = fGeo.addFolder('Center stone');
+bind(fStone, P.stone, 'diameter', 3, 12, 0.05, 'Diameter (mm)', RB);
+bind(fStone, P.stone, 'table', 0.3, 0.8, 0.005, 'Table ratio', RB);
+bind(fStone, P.stone, 'crown', 0.03, 0.35, 0.005, 'Crown height', RB);
+bind(fStone, P.stone, 'pavilion', 0.15, 0.75, 0.005, 'Pavilion depth', RB);
+bind(fStone, P.stone, 'girdle', 0.005, 0.12, 0.001, 'Girdle thickness', RB);
+bind(fStone, P.stone, 'star', 0.1, 0.9, 0.01, 'Star length', RB);
+bind(fStone, P.stone, 'lower', 0.3, 0.98, 0.01, 'Lower girdle', RB);
+bind(fStone, P.stone, 'mains', 5, 12, 1, 'Facet symmetry', RB);
+const fHead = fGeo.addFolder('Halo & head');
+bind(fHead, P.head, 'haloCount', 8, 48, 1, 'Halo stones', RB);
+bind(fHead, P.head, 'haloGem', 0.5, 2.5, 0.01, 'Halo stone size (mm)', RB);
+bind(fHead, P.head, 'haloGap', 0, 2, 0.01, 'Halo gap (mm)', RB);
+bind(fHead, P.head, 'haloTilt', -20, 45, 0.5, 'Halo tilt (°)', RB);
+bind(fHead, P.head, 'rim', 0.3, 1.6, 0.01, 'Halo rim mass', RB);
+bind(fHead, P.head, 'lift', 0.5, 7, 0.05, 'Head lift (mm)', RB);
+bind(fHead, P.head, 'stoneLift', 0, 3, 0.02, 'Stone seat (mm)', RB);
+bind(fHead, P.head, 'basketDrop', 0.3, 3, 0.02, 'Basket drop (mm)', RB);
+bind(fHead, P.head, 'prongs', 3, 8, 1, 'Prong count', RB);
+bind(fHead, P.head, 'prongDia', 0.3, 1.6, 0.02, 'Prong diameter (mm)', RB);
+bind(fHead, P.head, 'prongFlare', -0.3, 0.8, 0.01, 'Prong flare (mm)', RB);
+fHead.add(P.head, 'beads').name('Halo beads').onChange(RB);
+const fBand = fGeo.addFolder('Band & pavé');
+bind(fBand, P.band, 'innerR', 6, 12, 0.05, 'Inner radius (mm)', RB);
+bind(fBand, P.band, 'width', 0.8, 4.5, 0.02, 'Width (mm)', RB);
+bind(fBand, P.band, 'thick', 0.6, 4, 0.02, 'Thickness (mm)', RB);
+bind(fBand, P.band, 'square', 1.2, 8, 0.05, 'Squareness', RB);
+bind(fBand, P.band, 'taper', -0.4, 0.6, 0.01, 'Taper @ top', RB);
+bind(fBand, P.band, 'segs', 48, 320, 4, 'Sweep segments', RB);
+bind(fBand, P.band, 'paveCount', 0, 30, 1, 'Pavé stones / side', RB);
+bind(fBand, P.band, 'paveSize', 0.4, 2.2, 0.01, 'Pavé size (mm)', RB);
+bind(fBand, P.band, 'paveStart', 5, 90, 1, 'Pavé start (°)', RB);
+bind(fBand, P.band, 'paveEnd', 30, 180, 1, 'Pavé end (°)', RB);
+bind(fBand, P.band, 'paveInset', -0.2, 0.5, 0.005, 'Pavé inset', RB);
+fBand.add(P.band, 'paveBeads').name('Bead prongs').onChange(RB);
+bind(fBand, P.band, 'beadSize', 0.1, 0.8, 0.01, 'Bead size', RB);
+fStone.close(); fHead.close(); fBand.close();
+
+const fMat = gui.addFolder('Materials');
+const fMetal = fMat.addFolder('Metal (physical)');
+fMetal.addColor(P.metal, 'color').name('Color').onChange(UM);
+bind(fMetal, P.metal, 'metalness', 0, 1, 0.01, 'Metalness', UM);
+bind(fMetal, P.metal, 'roughness', 0, 1, 0.005, 'Roughness', UM);
+bind(fMetal, P.metal, 'envInt', 0, 4, 0.02, 'Env intensity', UM);
+bind(fMetal, P.metal, 'clearcoat', 0, 1, 0.01, 'Clearcoat', UM);
+bind(fMetal, P.metal, 'ccRough', 0, 1, 0.01, 'Clearcoat rough', UM);
+bind(fMetal, P.metal, 'reflectivity', 0, 1, 0.01, 'Reflectivity', UM);
+bind(fMetal, P.metal, 'specInt', 0, 2, 0.01, 'Specular intensity', UM);
+fMetal.addColor(P.metal, 'specColor').name('Specular color').onChange(UM);
+bind(fMetal, P.metal, 'sheen', 0, 1, 0.01, 'Sheen', UM);
+bind(fMetal, P.metal, 'sheenRough', 0, 1, 0.01, 'Sheen rough', UM);
+fMetal.addColor(P.metal, 'sheenColor').name('Sheen color').onChange(UM);
+const fGemM = fMat.addFolder('Diamond');
+fGemM.add(P, 'gemMode', ['Custom shader', 'Physical (transmission)']).name('Render mode').onChange(RB);
+bind(fGemM, P.gemPhys, 'transmission', 0, 1, 0.01, 'Transmission ⁽ᵖʰʸˢ⁾', UM);
+bind(fGemM, P.gemPhys, 'roughness', 0, 1, 0.005, 'Roughness ⁽ᵖʰʸˢ⁾', UM);
+bind(fGemM, P.gemPhys, 'ior', 1, 2.6, 0.005, 'IOR ⁽ᵖʰʸˢ⁾', UM);
+bind(fGemM, P.gemPhys, 'thickness', 0, 20, 0.1, 'Thickness ⁽ᵖʰʸˢ⁾', UM);
+bind(fGemM, P.gemPhys, 'dispersion', 0, 1, 0.005, 'Dispersion ⁽ᵖʰʸˢ⁾', UM);
+fGemM.addColor(P.gemPhys, 'attColor').name('Attenuation color').onChange(UM);
+bind(fGemM, P.gemPhys, 'attDist', 0.5, 60, 0.5, 'Attenuation dist', UM);
+bind(fGemM, P.gemPhys, 'clearcoat', 0, 1, 0.01, 'Clearcoat ⁽ᵖʰʸˢ⁾', UM);
+bind(fGemM, P.gemPhys, 'envInt', 0, 4, 0.02, 'Env intensity ⁽ᵖʰʸˢ⁾', UM);
+bind(fGemM, P.gemPhys, 'specInt', 0, 2, 0.01, 'Specular ⁽ᵖʰʸˢ⁾', UM);
+fMetal.close(); fGemM.close();
+
+const fLight = gui.addFolder('Lighting');
+function lightFolder(name, c, isKey){
+  const f = fLight.addFolder(name);
+  f.add(c, 'on').name('Enabled').onChange(UL);
+  bind(f, c, 'int', 0, 20, 0.05, 'Intensity', UL);
+  f.addColor(c, 'color').name('Color').onChange(UL);
+  bind(f, c, 'az', -180, 180, 1, 'Azimuth (°)', UL);
+  bind(f, c, 'el', -10, 89, 1, 'Elevation (°)', UL);
+  bind(f, c, 'dist', 15, 250, 1, 'Distance', UL);
+  bind(f, c, 'angle', 5, 89, 1, 'Cone angle (°)', UL);
+  bind(f, c, 'pen', 0, 1, 0.01, 'Penumbra', UL);
+  if (isKey){
+    f.add(c, 'shadow').name('Cast shadow').onChange(UL);
+    bind(f, c, 'radius', 0, 30, 0.5, 'Shadow softness', UL);
+    bind(f, c, 'blur', 2, 32, 1, 'Shadow blur samples', UL);
+    bind(f, c, 'bias', -0.005, 0.005, 0.0001, 'Shadow bias', UL);
+    bind(f, c, 'normalBias', 0, 0.2, 0.005, 'Normal bias', UL);
+  }
+  f.close();
+  return f;
+}
+lightFolder('Key', P.lights.key, true);
+lightFolder('Fill', P.lights.fill, false);
+lightFolder('Rim', P.lights.rim, false);
+const fEnv = fLight.addFolder('Environment (studio bake)');
+bind(fEnv, P.env, 'int', 0, 4, 0.02, 'Env intensity', UL);
+bind(fEnv, P.env, 'rot', -180, 180, 1, 'Env rotation (°)', UL);
+bind(fEnv, P.env, 'bright', 0.1, 3, 0.02, 'Env brightness', UE);
+bind(fEnv, P.env, 'contrast', 0.3, 2.5, 0.02, 'Env contrast', UE);
+bind(fEnv, P.env, 'sparkle', 0, 4, 0.05, 'Sparkle lights', UE);
+fEnv.add(P.env, 'res', [128, 256, 512]).name('Gem env res').onChange(v => { makeCube(v); rebakeEnv(); });
+fEnv.close();
+
+const fCam = gui.addFolder('Camera & lens');
+bind(fCam, P.cam, 'fov', 10, 90, 0.5, 'FOV (°)', UC);
+let focCtl = fCam.add(camInfo, 'focal').name('≈ Focal (35mm eq)').disable();
+bind(fCam, P.cam, 'exposure', 0.1, 3, 0.01, 'Exposure', UC);
+bind(fCam, P.cam, 'near', 0.1, 20, 0.1, 'Near', UC);
+bind(fCam, P.cam, 'far', 100, 5000, 10, 'Far', UC);
+bind(fCam, P.cam, 'rotate', -8, 8, 0.1, 'Auto-rotate speed', UC);
+
+const fPost = gui.addFolder('Post / tonemapping');
+fPost.add(P.post, 'tone', Object.keys(TONES)).name('Tone mapping').onChange(UP);
+fPost.add(P.post, 'bloom').name('Bloom').onChange(UP);
+bind(fPost, P.post, 'bloomTh', 0, 2.5, 0.01, 'Bloom threshold', UP);
+bind(fPost, P.post, 'bloomStr', 0, 2, 0.01, 'Bloom strength', UP);
+bind(fPost, P.post, 'bloomRad', 0, 1.5, 0.01, 'Bloom radius', UP);
+bind(fPost, P.post, 'vig', 0, 1, 0.01, 'Vignette', UP);
+bind(fPost, P.post, 'vigSoft', 0.05, 1.2, 0.01, 'Vignette softness', UP);
+bind(fPost, P.post, 'grain', 0, 0.3, 0.002, 'Film grain', UP);
+bind(fPost, P.post, 'contrast', 0.5, 1.8, 0.01, 'Contrast', UP);
+bind(fPost, P.post, 'sat', 0, 2, 0.01, 'Saturation', UP);
+bind(fPost, P.post, 'ca', 0, 0.02, 0.0002, 'Chromatic aberration', UP);
+
+bind(fPost, P.post, 'scale', 0.5, 3, 0.25, 'Render scale', UP);
+
+const fDof = gui.addFolder('Depth of field');
+fDof.add(P.post, 'dofOn').name('Enabled').onChange(UP);
+const dofFocusCtl = bind(fDof, P.post, 'dofFocus', 5, 120, 0.5, 'Focus', UP);
+bind(fDof, P.post, 'dofAperture', 0, 0.0005, 0.00001, 'Aperture', UP);
+bind(fDof, P.post, 'dofMaxblur', 0, 0.02, 0.001, 'Max blur', UP);
+
+const fShad = gui.addFolder('Shaders — diamond');
+bind(fShad, P.gem, 'ior', 1.2, 3.2, 0.005, 'IOR', UM);
+bind(fShad, P.gem, 'dispersion', 0, 3, 0.01, 'Dispersion', UM);
+bind(fShad, P.gem, 'fresnel', 0.5, 12, 0.1, 'Fresnel power', UM);
+bind(fShad, P.gem, 'bounces', 0, 4, 1, 'Internal bounces', UM);
+bind(fShad, P.gem, 'sparkle', 0, 4, 0.02, 'Sparkle intensity', UM);
+bind(fShad, P.gem, 'fire', 0, 3, 0.02, 'Fire (chroma)', UM);
+bind(fShad, P.gem, 'boost', 0.4, 3, 0.02, 'Contrast boost', UM);
+bind(fShad, P.gem, 'refl', 0, 3, 0.02, 'Surface reflection', UM);
+fShad.addColor(P.gem, 'tint').name('Body tint').onChange(UM);
+bind(fShad, P.gem, 'envInt', 0, 4, 0.02, 'Gem env intensity', UM);
+bind(fShad, P.gem, 'rough', 0, 1, 0.01, 'Facet blur', UM);
+
+const fScn = gui.addFolder('Scene');
+fScn.addColor(P.scn, 'bgTop').name('Background top').onChange(US);
+fScn.addColor(P.scn, 'bgBot').name('Background bottom').onChange(US);
+fScn.add(P.scn, 'ground').name('Ground').onChange(US);
+bind(fScn, P.scn, 'shadowOp', 0, 1, 0.01, 'Shadow opacity', US);
+bind(fScn, P.scn, 'contact', 0, 1, 0.01, 'Contact shadow', US);
+bind(fScn, P.scn, 'contactSize', 0.3, 3, 0.05, 'Contact size', US);
+fScn.add(P.scn, 'phys').name('Physical floor').onChange(US);
+fScn.addColor(P.scn, 'gColor').name('Floor color').onChange(US);
+bind(fScn, P.scn, 'gRough', 0, 1, 0.01, 'Floor roughness', US);
+fScn.add(P.scn, 'wire').name('Wireframe').onChange(US);
+fScn.add(P.scn, 'stats').name('FPS stats').onChange(US);
+
+/* presets */
+function deepSet(dst, src){ for (const k in src){
+  if (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k])){ if (!dst[k]) dst[k] = {}; deepSet(dst[k], src[k]); }
+  else dst[k] = src[k]; } }
+const BUILTINS = {
+  'Platinum Studio': {},
+  'Champagne Gold': {
+    metal:{ color:'#e7c079', roughness:0.2, envInt:1.1 },
+    scn:{ bgTop:'#eae3d7', bgBot:'#9e9385' },
+    lights:{ key:{ color:'#fff3e0' } },
+    gem:{ fire:0.55, tint:'#fffaf0' },
+    post:{ vig:0.4 }
+  },
+  'Noir Editorial': {
+    scn:{ bgTop:'#1a1b20', bgBot:'#050507', shadowOp:0.55 },
+    lights:{ key:{ int:1.6 }, fill:{ int:0.3 }, rim:{ int:4.5, color:'#dfe8ff' } },
+    env:{ bright:0.6, contrast:1.3, sparkle:1.6 },
+    metal:{ roughness:0.12 },
+    gem:{ fire:0.65, boost:2.2 },
+    post:{ bloomStr:0.3, bloomTh:1.25, vig:0.52, grain:0.06 }
+  }
+};
+function refreshGUI(){ gui.controllersRecursive().forEach(c => c.updateDisplay()); }
+function applyAll(){ updateMaterials(); rebuildRing(); updateLights(); updateCamera(); updatePost(); updateScene(); rebakeEnv(); }
+const presetCtl = {
+  preset: 'Platinum Studio',
+  copy(){
+    const json = JSON.stringify(P, null, 2);
+    (navigator.clipboard?.writeText(json) || Promise.reject()).then(
+      () => toast('State copied to clipboard'),
+      () => { window.prompt('Copy preset JSON:', json); });
+  },
+  paste(){
+    const t = window.prompt('Paste preset JSON:');
+    if (!t) return;
+    try { deepSet(P, JSON.parse(t)); applyAll(); refreshGUI(); toast('Preset loaded'); }
+    catch(e){ toast('Invalid JSON'); }
+  },
+  reset(){ deepSet(P, structuredClone(DEFAULTS)); applyAll(); refreshGUI(); toast('Reset to defaults'); }
+};
+const fPre = gui.addFolder('Presets');
+fPre.add(presetCtl, 'preset', Object.keys(BUILTINS)).name('Built-in').onChange(name => {
+  const base = structuredClone(DEFAULTS);
+  deepSet(base, BUILTINS[name]);
+  deepSet(P, base);
+  applyAll(); refreshGUI(); toast(name);
+});
+fPre.add(presetCtl, 'copy').name('Copy state (JSON)');
+fPre.add(presetCtl, 'paste').name('Paste state (JSON)');
+fPre.add(presetCtl, 'reset').name('Reset');
+
+fMat.close(); fLight.close(); fCam.close(); fPost.close(); fDof.close(); fShad.close(); fScn.close();
+gui.hide();
+
+/* ============================== BOOT / LOOP ============================== */
+applyAll();
+const _stoneW = new THREE.Vector3();
+function syncFocus(){
+  if (centerStone) centerStone.getWorldPosition(_stoneW); else _stoneW.copy(controls.target);
+  P.post.dofFocus = camera.position.distanceTo(_stoneW);
+  bokehPass.uniforms.focus.value = P.post.dofFocus;
+  dofFocusCtl.updateDisplay();
+}
+syncFocus();
+controls.addEventListener('change', syncFocus);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+
+let t = 0;
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  t += clock.getDelta();
+  gradePass.uniforms.uTime.value = t % 100;
+  controls.update();
+  if (controls.autoRotate) syncFocus();
+  composer.render();
+  if (P.scn.stats) stats.update();
+});
+window.__ok = true;
 </script>
 </body>
 </html>

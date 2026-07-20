@@ -1,53 +1,42 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
+<html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dataset Viewer</title>
+<title>Primitive Redesign Viewer</title>
 <style>
-  :root{--bg:#0e1116;--panel:#161b22;--panel-2:#1c232c;--border:#2a323d;
-        --text:#e6edf3;--muted:#8b98a5;--accent:#4aa8ff;--accent-2:#6ee7b7;--accent-3:#f0a04b;}
+  :root{--bg:#0e1116;--panel:#161b22;--panel-2:#1c232c;--border:#2a323d;--text:#e6edf3;
+        --muted:#8b98a5;--accent:#4aa8ff;--accent-2:#6ee7b7;--pass:#3fb950;--fail:#f85149;}
   *{box-sizing:border-box}
-  html,body{height:100%}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
        background:var(--bg);color:var(--text);line-height:1.5}
-  header.top{padding:12px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;
-             position:sticky;top:0;background:rgba(14,17,22,.95);backdrop-filter:blur(8px);z-index:20}
+  header.top{padding:12px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;
+             position:sticky;top:0;background:rgba(14,17,22,.95);backdrop-filter:blur(8px);z-index:20;flex-wrap:wrap}
   header.top h1{margin:0;font-size:14px;font-weight:600;white-space:nowrap}
-  .tabs{display:flex;gap:6px}
-  .tab{width:32px;height:32px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;
+  .tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .tab{height:32px;padding:0 12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:12px;
        border:1px solid var(--border);background:var(--panel-2);color:var(--muted);transition:all .15s}
   .tab:hover{border-color:var(--accent);color:var(--text)}
   .tab.active{background:var(--accent);border-color:var(--accent);color:#0b1220}
-  .legend{margin-left:auto;display:flex;gap:14px;font-size:11px;color:var(--muted)}
-  .legend span{display:flex;align-items:center;gap:5px}
-  .legend i{width:8px;height:8px;border-radius:50%;display:block}
-  main{padding:12px 22px 28px;max-width:1180px;margin:0 auto}
+  main{padding:12px 22px 30px;max-width:1240px;margin:0 auto}
   .panel{display:none;flex-direction:column;gap:12px}
   .panel.active{display:flex}
-  .prompt-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;
-              position:sticky;top:57px;z-index:15}
+  .prompt-box{background:var(--panel);border:1px solid var(--border);border-radius:10px}
   .prompt-head{display:flex;align-items:center;gap:12px;padding:9px 13px;border-bottom:1px solid var(--border)}
   .label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2)}
-  .id{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--muted);
-      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-  .expand{background:var(--panel-2);border:1px solid var(--border);color:var(--accent);
-          font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;cursor:pointer}
-  .expand:hover{border-color:var(--accent)}
+  .id{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--muted);flex:1;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .expand,.reasons-toggle{background:var(--panel-2);border:1px solid var(--border);color:var(--accent);
+       font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;cursor:pointer}
   .prompt{margin:0;padding:10px 13px;font-family:inherit;font-size:12.5px;white-space:pre-wrap;
-          word-break:break-word;max-height:54px;overflow:hidden}
-  .prompt.open{max-height:32vh;overflow:auto}
-  .grid{display:flex;flex-direction:column;gap:12px}
-  .stack{display:contents}
-  .pane{display:flex;flex-direction:column;min-width:0;height:68vh;min-height:400px;
-        background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-  .pane.tall{height:68vh}
-  .pane-head{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:8px 11px;font-size:12px;
-             font-weight:600;border-bottom:1px solid var(--border);background:var(--panel-2)}
-  .sub{font-weight:400;font-size:10px;color:var(--muted);border:1px solid var(--border);
-       border-radius:4px;padding:0 5px}
+          word-break:break-word;max-height:56px;overflow:hidden}
+  .prompt.open{max-height:34vh;overflow:auto}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .pane{display:flex;flex-direction:column;height:64vh;min-height:380px;background:var(--panel);
+        border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .pane-head{display:flex;align-items:center;gap:7px;padding:8px 11px;font-size:12px;font-weight:600;
+             border-bottom:1px solid var(--border);background:var(--panel-2)}
   .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
-  .dot.orig{background:var(--accent)} .dot.fin{background:var(--accent-2)} .dot.prim{background:var(--accent-3)}
+  .size{font-weight:500;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 5px;margin-left:2px}
+  .dot.m{background:var(--accent)} .dot.p{background:var(--accent-2)}
   .max{margin-left:auto;background:none;border:1px solid var(--border);color:var(--muted);
        border-radius:5px;font-size:11px;line-height:1;padding:3px 6px;cursor:pointer}
   .max:hover{color:var(--text);border-color:var(--accent)}
@@ -55,79 +44,111 @@
   .open:hover{color:var(--accent)}
   .frame{flex:1 1 auto;position:relative;min-height:0;background:#0b0e12}
   iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
-  .play{position:absolute;inset:0;width:100%;height:100%;border:0;cursor:pointer;
-        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-        background:#0b0e12;color:var(--muted);transition:color .15s,background .15s;z-index:2}
+  .play{position:absolute;inset:0;width:100%;height:100%;border:0;cursor:pointer;display:flex;
+        flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#0b0e12;
+        color:var(--muted);z-index:2}
   .play:hover{background:#10151b;color:var(--text)}
   .play .tri{width:0;height:0;border-style:solid;border-width:13px 0 13px 22px;
              border-color:transparent transparent transparent currentColor;margin-left:5px}
   .play em{font-style:normal;font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
   .frame.running .play{display:none}
-  .pane.empty .none{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-       gap:6px;color:var(--muted);font-size:12px;text-align:center;padding:12px}
-  .pane.empty .none span{font-size:11px;color:#5d6874}
+  .rubrics{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .rub-head{display:flex;align-items:center;gap:14px;padding:11px 14px;border-bottom:1px solid var(--border);
+            background:var(--panel-2);flex-wrap:wrap}
+  .cnt{display:inline-block;background:var(--panel);border:1px solid var(--border);color:var(--muted);
+       border-radius:999px;padding:0 7px;font-size:10px;margin-left:6px;font-weight:600}
+  .rub-note{font-size:11px;color:var(--muted)}
+  .reasons-toggle{margin-left:auto}
+  .rub-table{width:100%;border-collapse:collapse;font-size:13px}
+  .rub-table th{text-align:left;padding:9px 14px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+                color:var(--muted);border-bottom:1px solid var(--border);font-weight:700}
+  .rub-table th.col-m,.rub-table td.col-m,.rub-table th.col-p,.rub-table td.col-p{width:130px}
+  .rub-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+  .cat-row td{background:#12171e;color:var(--accent-2);font-size:10px;font-weight:700;
+              letter-spacing:.08em;text-transform:uppercase;padding:7px 14px}
+  .crit{color:var(--text)}
+  .tag{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--muted);
+       background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;margin-right:8px}
+  .badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;padding:2px 8px;
+         border-radius:5px;border:1px solid}
+  .badge.pass{color:var(--pass);border-color:rgba(63,185,80,.4);background:rgba(63,185,80,.1)}
+  .badge.fail{color:var(--fail);border-color:rgba(248,81,73,.4);background:rgba(248,81,73,.1)}
+  .reason{margin-top:6px;font-size:12px;color:#c9d3de;line-height:1.45}
+  .rubrics.no-reasons .reason{display:none}
   body.zoom{overflow:hidden}
   body.zoom .pane:not(.zoomed){display:none}
-  body.zoom .prompt-box{display:none}
+  body.zoom .prompt-box,body.zoom .rubrics{display:none}
+  body.zoom .grid{display:block}
   body.zoom .pane.zoomed{position:fixed;inset:57px 0 0 0;height:auto;border-radius:0;z-index:30}
-  @media(max-width:980px){.pane,.pane.tall{height:56vh;min-height:320px}}
-</style>
-</head>
+  @media(max-width:900px){.grid{grid-template-columns:1fr}.pane{height:56vh}}
+</style></head>
 <body>
-  <header class="top">
-    <h1>Dataset Viewer</h1>
+  <header class="top"><h1>Primitive Redesign Viewer</h1>
     <div class="tabs">
-      <button class="tab active" data-n="1">1</button>
-      <button class="tab" data-n="3">3</button>
-      <button class="tab" data-n="4">4</button>
-      <button class="tab" data-n="5">5</button>
-    </div>
-    <div class="legend">
-      <span><i class="dot orig"></i>Original</span>
-      <span><i class="dot fin"></i>Redesign (assets)</span>
-      <span><i class="dot prim"></i>Primitive redesign</span>
-    </div>
-  </header>
+      <button class="tab active" data-n="1">1 · Diamond Ring</button>
+      <button class="tab" data-n="3">3 · Horror Village</button>
+      <button class="tab" data-n="4">4 · Walking Robot</button>
+      <button class="tab" data-n="5">5 · Captain America Cat</button>
+    </div></header>
   <main>
     <section class="panel active" data-n="1">
       <div class="prompt-box">
-        <div class="prompt-head">
-          <span class="label">Prompt</span>
+        <div class="prompt-head"><span class="label">Prompt</span>
           <span class="id">8b24ec72-03bf-41d3-af62-ce441ca398c5</span>
-          <button class="expand" aria-expanded="false">Expand</button>
-        </div>
+          <button class="expand" aria-expanded="false">Expand</button></div>
         <pre class="prompt">A luxurious 3D render of a diamond engagement ring featuring a large round brilliant-cut center stone held by four prongs, surrounded by a delicate halo of smaller diamonds. The band is slim and elegant with pavé-set diamonds along the shank, crafted in polished white gold or platinum. The ring has a slightly elevated basket setting with intricate detailing beneath the center stone. Ultra-realistic reflections, high brilliance and sparkle, studio lighting with soft shadows, clean white background, 8K resolution, photorealistic, macro lens, depth of field, jewelry advertisement style.</pre>
       </div>
       <div class="grid">
-        <div class="pane tall" data-label="Original">
-          <div class="pane-head"><span class="dot orig"></span>Original
-            <button class="max" title="Maximize">⤢</button>
-            <a class="open" href="apps/original_1.html" target="_blank" rel="noopener">↗</a></div>
-          <div class="frame"><iframe data-src="apps/original_1.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
+        <div class="pane">
+          <div class="pane-head"><span class="dot m"></span>Model answer <span class="size">11KB</span>
+            <button class="max">⤢</button>
+            <a class="open" href="apps/model_1.html" target="_blank" rel="noopener">↗</a></div>
+          <div class="frame"><iframe data-src="apps/model_1.html" loading="lazy"></iframe>
+            <button class="play"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
-        <div class="stack">
-          <div class="pane" data-label="Redesign (assets)">
-            <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
-              <button class="max" title="Maximize">⤢</button>
-              <a class="open" href="apps/final_1/index.html" target="_blank" rel="noopener">↗</a></div>
-            <div class="frame"><iframe data-src="apps/final_1/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
-          </div>
-          <div class="pane" data-label="Primitive redesign">
-            <div class="pane-head"><span class="dot prim"></span>Primitive redesign
-              <button class="max" title="Maximize">⤢</button>
-              <a class="open" href="apps/prim_1/index.html" target="_blank" rel="noopener">↗</a></div>
-            <div class="frame"><iframe data-src="apps/prim_1/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
-          </div>
+        <div class="pane">
+          <div class="pane-head"><span class="dot p"></span>Primitive redesign <span class="size">41KB</span>
+            <button class="max">⤢</button>
+            <a class="open" href="apps/prim_1/index.html" target="_blank" rel="noopener">↗</a></div>
+          <div class="frame"><iframe data-src="apps/prim_1/index.html" loading="lazy"></iframe>
+            <button class="play"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
+      </div>
+      <div class="rubrics">
+        <div class="rub-head"><span class="label">Rubrics <span class="cnt">16</span></span>
+          <span class="rub-note">Primitive redesign marked all-pass</span>
+          <button class="reasons-toggle">Hide reasons</button></div>
+        <table class="rub-table">
+          <thead><tr><th>Criterion</th><th class="col-m">Model answer</th><th class="col-p">Primitive</th></tr></thead>
+          <tbody>
+            <tr class="cat-row"><td colspan="4">Functionality <span class="cnt">2</span></td></tr>
+            <tr><td class="crit"><span class="tag">builds</span>The HTML opens and a visible ring renders</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">Its a ring but very far from a engagement ring. The diamont is black and in the center of the ring.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">interactivity</span>The ring can be orbited/rotated to inspect it</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr class="cat-row"><td colspan="4">Instruction Following <span class="cnt">5</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>A ring is present</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There is a simple ring, more like a torus. But it does not look like an engagement ring.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>A large round center stone held by prongs is present</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The central diamond from an engagement ring should not be the center of the circle. The AI fails to understand this abstraction.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>A halo of smaller stones surrounds the center stone</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The band shows pave/small stones along the shank</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The setting is raised/basket-style, not the stone sitting flat on the band</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr class="cat-row"><td colspan="4">Visual Design <span class="cnt">9</span></td></tr>
+            <tr><td class="crit"><span class="tag">composition</span>The background is clean and white as requested</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">composition</span>Depth-of-field is visible (macro focus falloff)</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">No, there is no depth of field focus visible in the scene.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>Without the prompt, the object is recognizable as a diamond engagement ring</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">Looks like a simple torus. The diammond is in the center of the circle. Not in the ring like a tipical engagement ring.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>The center stone has faceted geometry, not a smooth ball or simple primitive</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">Looks like a sphere but oblong. Do not ressemble a diamond.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">materials</span>The diamonds show brilliance/sparkle and refraction, not flat grey fill</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The &quot;diamond&quot; looks deep black with no sparkle or refraction at all.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">materials</span>The band reads as polished reflective metal, distinct from the stones</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">lighting</span>The ring is brightly and evenly lit to show detail and sparkle (not dim or dark)</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">lighting</span>Soft shadows are present under the ring (not flat or shadowless)</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There are no shadows under the ring.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">composition</span>The ring is centered and well-framed at a flattering angle</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
     <section class="panel" data-n="3">
       <div class="prompt-box">
-        <div class="prompt-head">
-          <span class="label">Prompt</span>
+        <div class="prompt-head"><span class="label">Prompt</span>
           <span class="id">30b7f6a0-c2a9-4cd7-846f-1f09b72f08e4</span>
-          <button class="expand" aria-expanded="false">Expand</button>
-        </div>
+          <button class="expand" aria-expanded="false">Expand</button></div>
         <pre class="prompt">Ultra detailed 3D cartoon horror scene, night village environment, old stone well in center, moonlight, blue tone lighting, light fog, cinematic atmosphere, 
 main character: 18 year old boy, short black hair, blue shirt, black pants, holding flashlight, scared expression, standing near old well,
 action: boy slowly walking toward well and leaning forward to listen,
@@ -136,138 +157,181 @@ lighting: moonlight from top, soft shadows, volumetric fog,
 style: Pixar style 3D cartoon, smooth textures, not realistic, high quality render, depth of field, suspense mood. Generator image in 9:16 aspect ratio</pre>
       </div>
       <div class="grid">
-        <div class="pane tall" data-label="Original">
-          <div class="pane-head"><span class="dot orig"></span>Original
-            <button class="max" title="Maximize">⤢</button>
-            <a class="open" href="apps/original_3.html" target="_blank" rel="noopener">↗</a></div>
-          <div class="frame"><iframe data-src="apps/original_3.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
+        <div class="pane">
+          <div class="pane-head"><span class="dot m"></span>Model answer <span class="size">15KB</span>
+            <button class="max">⤢</button>
+            <a class="open" href="apps/model_3.html" target="_blank" rel="noopener">↗</a></div>
+          <div class="frame"><iframe data-src="apps/model_3.html" loading="lazy"></iframe>
+            <button class="play"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
-        <div class="stack">
-          <div class="pane" data-label="Redesign (assets)">
-            <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
-              <button class="max" title="Maximize">⤢</button>
-              <a class="open" href="apps/final_3/index.html" target="_blank" rel="noopener">↗</a></div>
-            <div class="frame"><iframe data-src="apps/final_3/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
-          </div>
-          <div class="pane" data-label="Primitive redesign">
-            <div class="pane-head"><span class="dot prim"></span>Primitive redesign
-              <button class="max" title="Maximize">⤢</button>
-              <a class="open" href="apps/prim_3/index.html" target="_blank" rel="noopener">↗</a></div>
-            <div class="frame"><iframe data-src="apps/prim_3/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
-          </div>
+        <div class="pane">
+          <div class="pane-head"><span class="dot p"></span>Primitive redesign <span class="size">45KB</span>
+            <button class="max">⤢</button>
+            <a class="open" href="apps/prim_3/index.html" target="_blank" rel="noopener">↗</a></div>
+          <div class="frame"><iframe data-src="apps/prim_3/index.html" loading="lazy"></iframe>
+            <button class="play"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
+      </div>
+      <div class="rubrics">
+        <div class="rub-head"><span class="label">Rubrics <span class="cnt">20</span></span>
+          <span class="rub-note">Primitive redesign marked all-pass</span>
+          <button class="reasons-toggle">Hide reasons</button></div>
+        <table class="rub-table">
+          <thead><tr><th>Criterion</th><th class="col-m">Model answer</th><th class="col-p">Primitive</th></tr></thead>
+          <tbody>
+            <tr class="cat-row"><td colspan="4">Functionality <span class="cnt">2</span></td></tr>
+            <tr><td class="crit"><span class="tag">builds</span>The HTML opens and a visible night scene renders</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The scene is very chaotic; it is impossible to make out anything that is happening. Only blurs are visible; what is supposed to be the character appears merely as a blue pill, moving very briefly and in an indescribable way.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">interactivity</span>The camera can be orbited around the scene</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The camera doesn&#x27;t rotate; it just moves slightly to one side or the other.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr class="cat-row"><td colspan="4">Instruction Following <span class="cnt">8</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>A nighttime village environment is depicted</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There is no scenery just a black background, a gray smudge representing the well, and squares floating randomly.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>An old stone well is present at the center of the scene</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">What is supposed to be the stone well is just a gray smudge stretching from one corner of the screen to the other; it is impossible to identify this smudge as any specific object.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>A boy character is present near the well</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">In place of the character, there is a blue pill—featureless and lacking a humanoid shape. These forms cannot be perceived as a character.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The boy is holding a flashlight</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">What is supposed to be the flashlight is stuck to the &quot;character&#x27;s&quot; leg, pointing downwards, and lacks any luminous material.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The boy wears a blue shirt and dark pants</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The character is formed by a blue pill, but no clothing can be identified on the character.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>Fog/haze is visible in the scene</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The scene lacks detail, has no fog, and features very little lighting.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>A walking animation plays: the boy moves toward the well</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The pill even moves toward what would be the well, but it doesn&#x27;t look like walking, and since there is no background, it&#x27;s hard to understand what is happening.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The boy&#x27;s feet stay on the ground without sliding or clipping during movement</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The camera is zoomed in too far; it is not possible to see what would be the character&#x27;s feet.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr class="cat-row"><td colspan="4">Visual Design <span class="cnt">10</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>The boy reads as a human figure (head, torso, limbs), not a generic primitive/block</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There is no human figure; a giant pill is visible in the scene.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>The well reads as a recognizable round stone well structure</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There is no well in the scene; what exists is a gray smudge symbolizing that something is there, but it lacks any shape or characteristics.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>The scene reads as a spooky night village without needing the prompt</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There is no setting; there is no village in the scene.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>The style reads as smooth Pixar-like cartoon, not photorealistic or blocky low-poly</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There is nothing in the scene just a dark scene, a gray smudge, and a blue pill.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">lighting</span>Despite the night setting the boy and well remain visible, with at least one intentional light source (moonlight or flashlight), not flat black</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">It is possible to see the blue pill that is supposed to be the character, but the scene lacks detail, making it impossible to identify what is happening.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">lighting</span>The scene has a cool blue moonlit tone with directional light and soft shadows</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There is no lighting in the scene no nighttime mood, no blue light, nothing.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">materials</span>The stone well reads as a rough stone/masonry material, distinct from the ground and the boy</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">There is no well in the scene; it is not possible to see what material it is made of.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">materials</span>The boy&#x27;s clothing and skin read as distinct materials (not all one flat color)</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The character has no skin and is not wearing any clothes; he is simply a large blue pill.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">composition</span>The scene is framed as a medium-wide shot with the boy and well both visible</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The scene is heavily zoomed in, making it impossible to see the full character. For this reason, we also cannot identify the well; it appears only as a shapeless gray blur.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">composition</span>The shot is from a slightly low angle, as requested</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The camera is at a medium height; it doesn&#x27;t appear to be viewing the scene from below.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
     <section class="panel" data-n="4">
       <div class="prompt-box">
-        <div class="prompt-head">
-          <span class="label">Prompt</span>
+        <div class="prompt-head"><span class="label">Prompt</span>
           <span class="id">c4eafffc-33a5-4a7c-8e45-6a5d401fca9b</span>
-          <button class="expand" aria-expanded="false">Expand</button>
-        </div>
+          <button class="expand" aria-expanded="false">Expand</button></div>
         <pre class="prompt">A robot with closed loop full cycle walking animation.</pre>
       </div>
       <div class="grid">
-        <div class="pane tall" data-label="Original">
-          <div class="pane-head"><span class="dot orig"></span>Original
-            <button class="max" title="Maximize">⤢</button>
-            <a class="open" href="apps/original_4.html" target="_blank" rel="noopener">↗</a></div>
-          <div class="frame"><iframe data-src="apps/original_4.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
+        <div class="pane">
+          <div class="pane-head"><span class="dot m"></span>Model answer <span class="size">14KB</span>
+            <button class="max">⤢</button>
+            <a class="open" href="apps/model_4.html" target="_blank" rel="noopener">↗</a></div>
+          <div class="frame"><iframe data-src="apps/model_4.html" loading="lazy"></iframe>
+            <button class="play"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
-        <div class="stack">
-          <div class="pane" data-label="Redesign (assets)">
-            <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
-              <button class="max" title="Maximize">⤢</button>
-              <a class="open" href="apps/final_4/index.html" target="_blank" rel="noopener">↗</a></div>
-            <div class="frame"><iframe data-src="apps/final_4/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
-          </div>
-          <div class="pane" data-label="Primitive redesign">
-            <div class="pane-head"><span class="dot prim"></span>Primitive redesign
-              <button class="max" title="Maximize">⤢</button>
-              <a class="open" href="apps/prim_4/index.html" target="_blank" rel="noopener">↗</a></div>
-            <div class="frame"><iframe data-src="apps/prim_4/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
-          </div>
+        <div class="pane">
+          <div class="pane-head"><span class="dot p"></span>Primitive redesign <span class="size">83KB</span>
+            <button class="max">⤢</button>
+            <a class="open" href="apps/prim_4/index.html" target="_blank" rel="noopener">↗</a></div>
+          <div class="frame"><iframe data-src="apps/prim_4/index.html" loading="lazy"></iframe>
+            <button class="play"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
+      </div>
+      <div class="rubrics">
+        <div class="rub-head"><span class="label">Rubrics <span class="cnt">13</span></span>
+          <span class="rub-note">Primitive redesign marked all-pass</span>
+          <button class="reasons-toggle">Hide reasons</button></div>
+        <table class="rub-table">
+          <thead><tr><th>Criterion</th><th class="col-m">Model answer</th><th class="col-p">Primitive</th></tr></thead>
+          <tbody>
+            <tr class="cat-row"><td colspan="4">Functionality <span class="cnt">2</span></td></tr>
+            <tr><td class="crit"><span class="tag">builds</span>The HTML opens and a visible robot renders</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The robot needs to be visible, but there is a lack of contrast; the robot is dark gray and the background is also dark, which makes it somewhat difficult to see.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">interactivity</span>The walking animation plays / can be viewed in motion</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr class="cat-row"><td colspan="4">Instruction Following <span class="cnt">5</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>A robot character is present</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The robot performs a walking animation</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The walk cycle loops seamlessly (no jump/reset at the loop point)</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The walk is a full cycle (both legs complete a step), not a partial or single step</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>Limbs stay connected to the body throughout the cycle (no detaching/overlapping joints)</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr class="cat-row"><td colspan="4">Visual Design <span class="cnt">6</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>Feet make ground contact without sliding or passing through the floor</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">No, the robot is positioned slightly below ground level—roughly at mid-shin height—so the feet are underneath; they are only visible when rotating the camera or during an animation.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>The character is recognizable as a robot (not an abstract or generic figure)</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>Robot geometry has deliberate structure, not only plain primitive blocks/spheres</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The robot&#x27;s structure lacks fine detail; it is composed of boxes of roughly the same size and a few cylinders forming the arms and legs.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">lighting</span>The robot is lit clearly enough to read its form (not dim or lost in a dark scene)</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">Even though there is light reflecting off the robot, the fact that it is dark gray and the background is black causes clarity to be lost at times; the scene lacks contrast.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">materials</span>Surfaces read as a metallic/robotic material, distinct from the background</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">composition</span>The robot is well-framed and fully visible in the default view</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
     <section class="panel" data-n="5">
       <div class="prompt-box">
-        <div class="prompt-head">
-          <span class="label">Prompt</span>
+        <div class="prompt-head"><span class="label">Prompt</span>
           <span class="id">53350eeb-dc89-449e-975d-2cc90cd48614</span>
-          <button class="expand" aria-expanded="false">Expand</button>
-        </div>
+          <button class="expand" aria-expanded="false">Expand</button></div>
         <pre class="prompt">A 3D model of a cute fluffy cat standing upright on two legs in a heroic pose. The cat is wearing a detailed Captain America superhero suit with a blue helmet with wings, scale armor texture on the torso, and red boots. The cat is holding a circular Vibranium shield with a star emblem in its paw. High quality, clean topology, 4k texture, PBR material, stylized character design, studio lighting, white background.</pre>
       </div>
       <div class="grid">
-        <div class="pane tall" data-label="Original">
-          <div class="pane-head"><span class="dot orig"></span>Original
-            <button class="max" title="Maximize">⤢</button>
-            <a class="open" href="apps/original_5.html" target="_blank" rel="noopener">↗</a></div>
-          <div class="frame"><iframe data-src="apps/original_5.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
+        <div class="pane">
+          <div class="pane-head"><span class="dot m"></span>Model answer <span class="size">17KB</span>
+            <button class="max">⤢</button>
+            <a class="open" href="apps/model_5.html" target="_blank" rel="noopener">↗</a></div>
+          <div class="frame"><iframe data-src="apps/model_5.html" loading="lazy"></iframe>
+            <button class="play"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
-        <div class="stack">
-          <div class="pane" data-label="Redesign (assets)">
-            <div class="pane-head"><span class="dot fin"></span>Redesign <span class="sub">assets</span>
-              <button class="max" title="Maximize">⤢</button>
-              <a class="open" href="apps/final_5/index.html" target="_blank" rel="noopener">↗</a></div>
-            <div class="frame"><iframe data-src="apps/final_5/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
-          </div>
-          <div class="pane" data-label="Primitive redesign">
-            <div class="pane-head"><span class="dot prim"></span>Primitive redesign
-              <button class="max" title="Maximize">⤢</button>
-              <a class="open" href="apps/prim_5/index.html" target="_blank" rel="noopener">↗</a></div>
-            <div class="frame"><iframe data-src="apps/prim_5/index.html" loading="lazy"></iframe><button class="play" aria-label="Start scene"><span class="tri"></span><em>Click to run</em></button></div>
-          </div>
+        <div class="pane">
+          <div class="pane-head"><span class="dot p"></span>Primitive redesign <span class="size">1MB</span>
+            <button class="max">⤢</button>
+            <a class="open" href="apps/prim_5/index.html" target="_blank" rel="noopener">↗</a></div>
+          <div class="frame"><iframe data-src="apps/prim_5/index.html" loading="lazy"></iframe>
+            <button class="play"><span class="tri"></span><em>Click to run</em></button></div>
         </div>
+      </div>
+      <div class="rubrics">
+        <div class="rub-head"><span class="label">Rubrics <span class="cnt">14</span></span>
+          <span class="rub-note">Primitive redesign marked all-pass</span>
+          <button class="reasons-toggle">Hide reasons</button></div>
+        <table class="rub-table">
+          <thead><tr><th>Criterion</th><th class="col-m">Model answer</th><th class="col-p">Primitive</th></tr></thead>
+          <tbody>
+            <tr class="cat-row"><td colspan="4">Functionality <span class="cnt">2</span></td></tr>
+            <tr><td class="crit"><span class="tag">builds</span>The HTML opens and a visible character renders</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">interactivity</span>The character can be orbited/rotated to inspect it</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr class="cat-row"><td colspan="4">Instruction Following <span class="cnt">6</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>A cat character is present</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The cat stands upright on two legs in a heroic pose</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">It fails because the cat is floating, with both legs not touching the ground, which makes it look like a floating cat. However, it is still in a heroic pose, and the cat model is well modeled.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The cat wears a blue winged helmet</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">The helmet color is fine, it&#x27;s blue. The problem is the wings. From the front, the side and up close they only show up as two tiny flat white triangles stuck on the sides of the helmet, too small and with no real shape, so you can&#x27;t tell they&#x27;re meant to be wings. Just to be clear the white marks on the forehead are the &quot;A&quot;, not wings, and the white points on top are the cat&#x27;s ears. And the &quot;A&quot; itself is upside down, the two strokes open up at the top and come together at the bottom so it looks like a V, with the crossbar mostly hidden behind the helmet rim. So the &quot;winged helmet&quot; isn&#x27;t really there. And the blue band across the forehead, which is meant to be the helmet brim, is modeled wrong, it floats out in front of the face like a loose ring instead of sitting on the helmet, and it just looks bad. So between the missing wings, the flipped A and the broken brim, the blue winged helmet isn&#x27;t really there.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The torso shows scale-armor texture</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The cat wears red boots</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">prompt-adherence</span>The cat holds a circular shield with a star emblem</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr class="cat-row"><td colspan="4">Visual Design <span class="cnt">6</span></td></tr>
+            <tr><td class="crit"><span class="tag">composition</span>The background is white as requested</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>Without the prompt, it is recognizable as a cat in a superhero suit</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">scene-fidelity</span>The character has deliberate modeled geometry, not plain primitive blocks/spheres</td><td class="col-m"><span class="badge fail">FAIL</span><div class="reason">This is where the model’s construction really shows, but it lacks clarity and polish. The whole character is made of stock primitives stuck together, basically a pile of spheres and capsules: the head is a sphere, the cheeks and muzzle are spheres, the belly is a stretched sphere, the eyes, nose, and paws are spheres, the body, arms, and legs are capsules, the boots are cylinders, and the ears are cones. I counted more than 15 spheres, 4 or more capsules, 5 or more cylinders, and 4 cones. The only parts that are not raw primitives are the upside-down flat star, the tiny wings, and the tube-like tail, but those are simple too. It is arranged deliberately enough that you can tell it is a Captain America cat, but there is no real modeled or sculpted geometry. It is mostly default primitive blocks and spheres, and the overall shape does not have enough clarity.</div></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">materials</span>Surfaces read as distinct materials (fur vs armor vs metal shield)</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">lighting</span>The character is lit clearly (studio lighting) and fully readable (not dim or dark)</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+            <tr><td class="crit"><span class="tag">composition</span>The character is centered and fully visible in the default view</td><td class="col-m"><span class="badge pass">PASS</span></td><td class="col-p"><span class="badge pass">PASS</span></td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
   </main>
 <script>
-  function runFrame(frame){
-    const f=frame.querySelector('iframe');
-    if(f.dataset.src){ f.src=f.dataset.src; f.removeAttribute('data-src'); }
-    frame.classList.add('running');
-  }
-  function stopAll(panel){
-    panel.querySelectorAll('.frame.running').forEach(frame=>{
-      const f=frame.querySelector('iframe');
-      if(f.src){ f.dataset.src=f.src; f.removeAttribute('src'); }
-      frame.classList.remove('running');
-    });
-  }
-  document.querySelectorAll('.play').forEach(btn=>{
-    btn.addEventListener('click',()=>runFrame(btn.closest('.frame')));
-  });
-  document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
-    unzoom();
-    const n=tab.dataset.n;
-    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t===tab));
-    document.querySelectorAll('.panel').forEach(p=>{
-      const on=p.dataset.n===n;
-      if(!on && p.classList.contains('active')) stopAll(p);
-      p.classList.toggle('active',on);
-    });
-    window.scrollTo({top:0,behavior:'smooth'});
-  }));
-  document.querySelectorAll('.expand').forEach(b=>b.addEventListener('click',()=>{
-    const pre=b.closest('.prompt-box').querySelector('.prompt');
-    const open=pre.classList.toggle('open');
-    b.textContent=open?'Collapse':'Expand'; b.setAttribute('aria-expanded',open);
-  }));
-  function unzoom(){
-    document.body.classList.remove('zoom');
+  function runFrame(fr){const f=fr.querySelector('iframe');
+    if(f.dataset.src){f.src=f.dataset.src;f.removeAttribute('data-src');}fr.classList.add('running');}
+  function stopAll(p){p.querySelectorAll('.frame.running').forEach(fr=>{
+    const f=fr.querySelector('iframe');if(f.src){f.dataset.src=f.src;f.removeAttribute('src');}
+    fr.classList.remove('running');});}
+  document.querySelectorAll('.play').forEach(b=>b.addEventListener('click',()=>runFrame(b.closest('.frame'))));
+  function unzoom(){document.body.classList.remove('zoom');
     document.querySelectorAll('.pane.zoomed').forEach(p=>p.classList.remove('zoomed'));
-    document.querySelectorAll('.max').forEach(b=>b.textContent='⤢');
-  }
+    document.querySelectorAll('.max').forEach(b=>b.textContent='⤢');}
   document.querySelectorAll('.max').forEach(btn=>btn.addEventListener('click',()=>{
-    const pane=btn.closest('.pane');
-    const on=pane.classList.contains('zoomed');
-    unzoom();
-    if(!on){ pane.classList.add('zoomed'); document.body.classList.add('zoom'); btn.textContent='⤡'; }
-  }));
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape') unzoom(); });
-
-</script>
-</body>
-</html>
+    const pane=btn.closest('.pane');const on=pane.classList.contains('zoomed');unzoom();
+    if(!on){pane.classList.add('zoomed');document.body.classList.add('zoom');btn.textContent='⤡';}}));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')unzoom();});
+  document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
+    unzoom();const n=tab.dataset.n;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t===tab));
+    document.querySelectorAll('.panel').forEach(p=>{const on=p.dataset.n===n;
+      if(!on&&p.classList.contains('active'))stopAll(p);p.classList.toggle('active',on);});
+    window.scrollTo({top:0,behavior:'smooth'});}));
+  document.querySelectorAll('.expand').forEach(b=>b.addEventListener('click',()=>{
+    const pre=b.closest('.prompt-box').querySelector('.prompt');const open=pre.classList.toggle('open');
+    b.textContent=open?'Collapse':'Expand';}));
+  document.querySelectorAll('.reasons-toggle').forEach(b=>b.addEventListener('click',()=>{
+    const box=b.closest('.rubrics');const hid=box.classList.toggle('no-reasons');
+    b.textContent=hid?'Show reasons':'Hide reasons';}));
+</script></body></html>

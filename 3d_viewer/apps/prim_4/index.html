@@ -26,17 +26,17 @@
     drag to orbit
   </div>
 
-  <div style="position:absolute;left:50%;bottom:34px;transform:translateX(-50%);width:min(560px,88vw);background:rgba(10,28,54,.72);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:22px 26px 24px;box-shadow:0 18px 50px rgba(0,0,0,.45);">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
-      <div style="font-family:'Space Mono',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);">Gait</div>
+  <div style="position:absolute;left:24px;bottom:24px;width:min(330px,72vw);background:rgba(10,28,54,.74);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px 18px 18px;box-shadow:0 14px 40px rgba(0,0,0,.45);">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);">Gait</div>
       <div style="display:flex;align-items:baseline;gap:8px;">
-        <span style="font-size:26px;font-weight:700;color:#f5d800;line-height:1;">{{ gaitLabel }}</span>
-        <span style="font-family:'Space Mono',monospace;font-size:12px;color:rgba(255,255,255,.5);">{{ speedText }}</span>
+        <span style="font-size:20px;font-weight:700;color:#f5d800;line-height:1;">{{ gaitLabel }}</span>
+        <span style="font-family:'Space Mono',monospace;font-size:11px;color:rgba(255,255,255,.5);">{{ speedText }}</span>
       </div>
     </div>
     <input type="range" min="0" max="100" value="{{ gait }}" onInput="{{ onGait }}"
       style="width:100%;-webkit-appearance:none;appearance:none;height:8px;border-radius:99px;background:linear-gradient(90deg,#e61e1e,#f5d800);outline:none;cursor:pointer;" />
-    <div style="display:flex;justify-content:space-between;margin-top:10px;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:rgba(255,255,255,.5);">
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;color:rgba(255,255,255,.5);">
       <span>STROLL</span><span>WALK</span><span>JOG</span><span>SPRINT</span>
     </div>
   </div>
@@ -45,6 +45,22 @@
 <script type="text/x-dc" data-dc-script>
 class Component extends DCLogic {
   state = { gait: 35 };
+  // rig dimensions (must match buildLeg): thigh, shin, sole height, toe reach, safe leg reach
+  L1 = 1.1; L2 = 1.05; FOOT = 0.30; TOE = 0.72; R = 2.118;
+
+  gaitParams(g) {
+    const f = (2 + 5.5 * g) / (2 * Math.PI); // stride cycles per second
+    const S = 0.5 + 0.55 * g;                // half stride length
+    const sf = 0.62 - 0.27 * g;              // stance fraction of cycle
+    return {
+      f, S, sf,
+      lift: 0.22 + 0.5 * g,
+      hop: 0.3 * g * g,
+      lean: 0.18 * g,
+      toeMax: 0.22 + 0.3 * g,
+      speed: 2 * S * f / sf,                 // stance foot speed == ground scroll speed
+    };
+  }
 
   renderVals() {
     const g = this.state.gait / 100;
@@ -53,11 +69,10 @@ class Component extends DCLogic {
     else if (this.state.gait < 40) label = "Walk";
     else if (this.state.gait < 72) label = "Jog";
     else label = "Run";
-    const speed = (2 + g * 8).toFixed(1);
     return {
       gait: this.state.gait,
       gaitLabel: label,
-      speedText: speed + " m/s",
+      speedText: this.gaitParams(g).speed.toFixed(1) + " m/s",
       mount: (el) => { this._el = el; this.tryInit(); },
       onGait: (e) => this.setState({ gait: +e.target.value }),
     };
@@ -74,6 +89,7 @@ class Component extends DCLogic {
 
   componentWillUnmount() {
     this._stop = true;
+    if (this._onResize) window.removeEventListener("resize", this._onResize);
     if (this._renderer) this._renderer.dispose();
   }
 
@@ -87,7 +103,7 @@ class Component extends DCLogic {
     scene.fog = new THREE.Fog(0x0d2f5e, 14, 34);
 
     const camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 100);
-    this.cam = { az: 0.5, pol: 1.12, r: 15, target: new THREE.Vector3(0, 2.15, 0) };
+    this.cam = { az: 0.5, pol: 1.12, r: 14, target: new THREE.Vector3(0, 2.3, 0) };
     this.applyCam(camera);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -96,12 +112,30 @@ class Component extends DCLogic {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.18;
     el.appendChild(renderer.domElement);
     this._renderer = renderer;
 
+    // environment map — a simple studio box so the metal has something to reflect
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const env = new THREE.Scene();
+    env.add(new THREE.Mesh(new THREE.BoxGeometry(30, 30, 30),
+      new THREE.MeshBasicMaterial({ color: 0x16273d, side: THREE.BackSide })));
+    const softbox = (w, h, c, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: c }));
+      m.position.set(x, y, z); m.lookAt(0, 0, 0); env.add(m);
+    };
+    softbox(12, 12, 0xffffff, 0, 14, 0);   // ceiling key
+    softbox(10, 6, 0x9fc8ff, -14, 4, 3);   // cool side
+    softbox(10, 6, 0xffe9c4, 14, 5, -2);   // warm side
+    softbox(16, 4, 0x6d84a5, 0, 2, -14);   // horizon strip
+    scene.environment = pmrem.fromScene(env, 0.04).texture;
+    pmrem.dispose();
+
     // lights
-    scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x22344f, 0.55));
-    const key = new THREE.DirectionalLight(0xffffff, 1.05);
+    scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x22344f, 0.4));
+    const key = new THREE.DirectionalLight(0xffffff, 0.9);
     key.position.set(6, 11, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -111,14 +145,14 @@ class Component extends DCLogic {
     key.shadow.camera.near = 1; key.shadow.camera.far = 40;
     key.shadow.bias = -0.0004;
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x8fb4ff, 0.35);
+    const fill = new THREE.DirectionalLight(0x8fb4ff, 0.3);
     fill.position.set(-7, 4, -4);
     scene.add(fill);
 
     // ground
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(120, 120),
-      new THREE.MeshStandardMaterial({ color: 0xe9edf2, roughness: 0.95, metalness: 0 })
+      new THREE.MeshStandardMaterial({ color: 0xe9edf2, roughness: 0.95, metalness: 0, envMapIntensity: 0 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
@@ -128,18 +162,15 @@ class Component extends DCLogic {
     grid.material.transparent = true; grid.material.opacity = 0.55;
     scene.add(grid);
     this.grid = grid;
-    this.gridStep = 120 / 120; // one cell = 1 unit
+    this.gridStep = 1;
     this.scroll = 0;
 
-    // robot
     const robot = this.buildRobot(THREE);
     scene.add(robot);
     this.robot = robot;
 
-    // orbit interaction
     this.bindOrbit(el, camera);
 
-    // resize
     const onResize = () => {
       const w = el.clientWidth, h = el.clientHeight;
       camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -149,7 +180,9 @@ class Component extends DCLogic {
     this._onResize = onResize;
 
     const clock = new THREE.Clock();
-    this.phase = 0;
+    this.cyc = 0;
+    this._v1 = new THREE.Vector3();
+    this._v2 = new THREE.Vector3();
     const loop = () => {
       if (this._stop) return;
       requestAnimationFrame(loop);
@@ -161,65 +194,135 @@ class Component extends DCLogic {
     loop();
   }
 
-  mat(THREE, color, opts = {}) {
-    return new THREE.MeshStandardMaterial({ color, roughness: opts.r ?? 0.45, metalness: opts.m ?? 0.05 });
+  makeMaterials(THREE) {
+    const paint = (c) => new THREE.MeshStandardMaterial({ color: c, metalness: 0.85, roughness: 0.3, envMapIntensity: 0.9 });
+    this.M = {
+      red: paint(0xe62525),
+      blue: paint(0x2f36d9),
+      yellow: paint(0xffd900),
+      steel: new THREE.MeshStandardMaterial({ color: 0xd8dde3, metalness: 1.0, roughness: 0.2, envMapIntensity: 1.3 }),
+      dark: new THREE.MeshStandardMaterial({ color: 0x33373d, metalness: 0.9, roughness: 0.38, envMapIntensity: 1.0 }),
+      rubber: new THREE.MeshStandardMaterial({ color: 0x24272b, metalness: 0, roughness: 0.92, envMapIntensity: 0.4 }),
+      glow: new THREE.MeshStandardMaterial({ color: 0xf5d800, emissive: 0xf5d800, emissiveIntensity: 0.7, metalness: 0.2, roughness: 0.3 }),
+      redGlow: new THREE.MeshStandardMaterial({ color: 0xff3b30, emissive: 0xff3b30, emissiveIntensity: 0.8, metalness: 0.2, roughness: 0.3 }),
+    };
   }
 
-  box(THREE, w, h, d, color, r) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), this.mat(THREE, color, r));
+  box(THREE, w, h, d, mat) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.castShadow = true; m.receiveShadow = true; return m;
   }
-  cyl(THREE, rt, rb, h, color, seg = 24) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), this.mat(THREE, color));
+  cyl(THREE, rt, rb, h, mat, seg = 24) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
     m.castShadow = true; m.receiveShadow = true; return m;
+  }
+  edge(THREE, mesh) {
+    mesh.add(new THREE.LineSegments(
+      new THREE.EdgesGeometry(mesh.geometry, 20),
+      new THREE.LineBasicMaterial({ color: 0x14171c, transparent: true, opacity: 0.55 })
+    ));
+  }
+  bolt(THREE, parent, x, y, z, r = 0.045, axis = "z") {
+    const b = this.cyl(THREE, r, r, 0.045, this.M.dark, 12);
+    if (axis === "z") b.rotation.x = Math.PI / 2;
+    if (axis === "x") b.rotation.z = Math.PI / 2;
+    b.position.set(x, y, z);
+    parent.add(b);
+  }
+  hubCap(THREE, parent, x, r) { // joint end-cap + center bolt, on the x axis
+    const cap = this.cyl(THREE, r, r, 0.06, this.M.dark, 20);
+    cap.rotation.z = Math.PI / 2;
+    cap.position.x = x;
+    parent.add(cap);
+    this.bolt(THREE, parent, x + Math.sign(x) * 0.035, 0, 0, 0.08, "x");
+  }
+  ring(THREE, parent, r, y, mat) { // cuff ring on a vertical tube
+    const c = this.cyl(THREE, r, r, 0.09, mat || this.M.dark, 20);
+    c.position.y = y;
+    parent.add(c);
   }
 
   buildRobot(THREE) {
-    const C = { blue: 0x2b32c9, red: 0xe61e1e, yellow: 0xf5d800, gray: 0x9ba0a6, dark: 0x4a4d52 };
+    this.makeMaterials(THREE);
+    const M = this.M;
     const robot = new THREE.Group();
 
-    // ---- torso ----
     const body = new THREE.Group();
-    body.position.y = 2.55;
+    body.position.y = 3.7;
     robot.add(body);
     this.body = body;
 
-    const chest = this.box(THREE, 1.7, 1.5, 1.1, C.red);
+    // ---- chest ----
+    const chest = this.box(THREE, 1.7, 1.5, 1.1, M.red);
+    this.edge(THREE, chest);
     body.add(chest);
+    // vents (left of front face)
+    [0.34, 0.18, 0.02].forEach((y) => {
+      const v = this.box(THREE, 0.55, 0.06, 0.04, M.dark);
+      v.position.set(-0.38, y, 0.55);
+      body.add(v);
+    });
+    // access hatch (right of front face) + corner bolts
+    const hatch = this.box(THREE, 0.55, 0.6, 0.05, M.dark);
+    hatch.position.set(0.38, 0.14, 0.55);
+    this.edge(THREE, hatch);
+    body.add(hatch);
+    [[0.2, 0.24], [-0.2, 0.24], [0.2, -0.24], [-0.2, -0.24]].forEach(([dx, dy]) =>
+      this.bolt(THREE, body, 0.38 + dx, 0.14 + dy, 0.585, 0.035));
+    // chest corner bolts
+    [[0.75, 0.62], [-0.75, 0.62], [0.75, -0.62], [-0.75, -0.62]].forEach(([x, y]) =>
+      this.bolt(THREE, body, x, y, 0.56));
 
-    // pelvis
-    const pelvis = this.box(THREE, 1.35, 0.75, 0.95, C.red);
+    // ---- pelvis + belt ----
+    const pelvis = this.box(THREE, 1.35, 0.75, 0.95, M.red);
     pelvis.position.y = -1.15;
+    this.edge(THREE, pelvis);
     body.add(pelvis);
-    const belt = this.box(THREE, 1.38, 0.16, 0.98, C.blue);
+    const seam = this.box(THREE, 1.0, 0.03, 0.03, M.dark);
+    seam.position.set(0, -1.02, 0.48);
+    body.add(seam);
+    this.bolt(THREE, body, 0.5, -1.3, 0.485); this.bolt(THREE, body, -0.5, -1.3, 0.485);
+    const belt = this.box(THREE, 1.38, 0.16, 0.98, M.blue);
     belt.position.y = -0.78;
     body.add(belt);
+    const buckle = this.box(THREE, 0.34, 0.2, 0.06, M.dark);
+    buckle.position.set(0, -0.78, 0.52);
+    body.add(buckle);
 
     // ---- head ----
-    const head = this.cyl(THREE, 0.5, 0.85, 0.95, C.blue, 4);
+    const neck = this.cyl(THREE, 0.3, 0.3, 0.16, M.dark, 20);
+    neck.position.y = 0.82;
+    body.add(neck);
+    const head = this.cyl(THREE, 0.5, 0.85, 0.95, M.blue, 4);
     head.rotation.y = Math.PI / 4;
     head.position.y = 1.35;
+    this.edge(THREE, head);
     body.add(head);
-    const eyeGeo = new THREE.SphereGeometry(0.14, 20, 20);
-    const eyeMat = this.mat(THREE, C.yellow, { r: 0.25 });
     [-0.26, 0.26].forEach((x) => {
-      const eye = new THREE.Mesh(eyeGeo, eyeMat);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 20), M.glow);
       eye.castShadow = true;
       eye.position.set(x, 1.42, 0.5);
       body.add(eye);
     });
+    // antenna
+    const ant = this.cyl(THREE, 0.02, 0.02, 0.55, M.steel, 8);
+    ant.position.set(0.32, 1.95, 0);
+    body.add(ant);
+    const antTip = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 12), M.redGlow);
+    antTip.position.set(0.32, 2.26, 0);
+    body.add(antTip);
 
     // ---- arms ----
-    this.armL = this.buildArm(THREE, C, 1);
-    this.armR = this.buildArm(THREE, C, -1);
+    this.armL = this.buildArm(THREE, 1);
+    this.armR = this.buildArm(THREE, -1);
     this.armL.group.position.set(0.95, 0.55, 0);
     this.armR.group.position.set(-0.95, 0.55, 0);
     body.add(this.armL.group);
     body.add(this.armR.group);
 
     // ---- legs ----
-    this.legL = this.buildLeg(THREE, C, 1);
-    this.legR = this.buildLeg(THREE, C, -1);
+    this.legL = this.buildLeg(THREE, 1);
+    this.legR = this.buildLeg(THREE, -1);
     this.legL.group.position.set(0.42, -1.35, 0);
     this.legR.group.position.set(-0.42, -1.35, 0);
     body.add(this.legL.group);
@@ -228,115 +331,163 @@ class Component extends DCLogic {
     return robot;
   }
 
-  buildArm(THREE, C, side) {
+  buildArm(THREE, side) {
+    const M = this.M;
     const group = new THREE.Group(); // shoulder pivot
-    // shoulder cylinder (yellow, horizontal)
-    const sh = this.cyl(THREE, 0.34, 0.34, 0.55, C.yellow);
+    const sh = this.cyl(THREE, 0.34, 0.34, 0.55, M.yellow);
     sh.rotation.z = Math.PI / 2;
     sh.position.x = side * 0.18;
     group.add(sh);
-    // upper arm (gray)
-    const upper = this.cyl(THREE, 0.2, 0.2, 0.85, C.gray);
+    this.hubCap(THREE, group, side * 0.47, 0.26);
+    const upper = this.cyl(THREE, 0.2, 0.2, 0.85, M.steel);
     upper.position.y = -0.55;
     group.add(upper);
-    // elbow group
     const elbow = new THREE.Group();
     elbow.position.y = -1.0;
     group.add(elbow);
-    const kn = this.cyl(THREE, 0.24, 0.24, 0.4, C.yellow);
+    const kn = this.cyl(THREE, 0.24, 0.24, 0.4, M.yellow);
     kn.rotation.z = Math.PI / 2;
     elbow.add(kn);
-    const fore = this.cyl(THREE, 0.19, 0.19, 0.8, C.yellow);
+    this.hubCap(THREE, elbow, side * 0.23, 0.19);
+    const fore = this.cyl(THREE, 0.19, 0.19, 0.8, M.yellow);
     fore.position.y = -0.5;
     elbow.add(fore);
-    const hand = this.box(THREE, 0.42, 0.42, 0.42, C.gray);
+    this.ring(THREE, elbow, 0.21, -0.82, M.steel);
+    const hand = this.box(THREE, 0.42, 0.42, 0.42, M.steel);
     hand.position.y = -1.0;
+    this.edge(THREE, hand);
     elbow.add(hand);
     return { group, elbow };
   }
 
-  buildLeg(THREE, C, side) {
+  buildLeg(THREE, side) {
+    const M = this.M;
     const group = new THREE.Group(); // hip pivot
-    const hip = this.cyl(THREE, 0.34, 0.34, 0.5, C.yellow);
+    const hip = this.cyl(THREE, 0.34, 0.34, 0.5, M.yellow);
     hip.rotation.z = Math.PI / 2;
     group.add(hip);
-    const thigh = this.cyl(THREE, 0.26, 0.26, 0.95, C.yellow);
+    this.hubCap(THREE, group, side * 0.28, 0.26);
+    const thigh = this.cyl(THREE, 0.26, 0.26, 0.95, M.yellow);
     thigh.position.y = -0.6;
     group.add(thigh);
+    this.ring(THREE, group, 0.285, -0.24);
     const knee = new THREE.Group();
-    knee.position.y = -1.1;
+    knee.position.y = -1.1; // = L1
     group.add(knee);
-    const kc = this.cyl(THREE, 0.28, 0.28, 0.44, C.gray);
+    const kc = this.cyl(THREE, 0.28, 0.28, 0.44, M.steel);
     kc.rotation.z = Math.PI / 2;
     knee.add(kc);
-    const shin = this.cyl(THREE, 0.24, 0.24, 0.9, C.yellow);
+    this.hubCap(THREE, knee, side * 0.25, 0.22);
+    const shin = this.cyl(THREE, 0.24, 0.24, 0.9, M.yellow);
     shin.position.y = -0.6;
     knee.add(shin);
-    // foot
+    this.ring(THREE, knee, 0.26, -0.98);
     const ankle = new THREE.Group();
-    ankle.position.y = -1.05;
+    ankle.position.y = -1.05; // = L2
     knee.add(ankle);
-    const foot = this.box(THREE, 0.5, 0.34, 0.95, C.gray);
-    foot.position.set(0, -0.05, 0.22);
+    const guard = this.cyl(THREE, 0.17, 0.17, 0.3, M.steel, 16);
+    guard.rotation.z = Math.PI / 2;
+    ankle.add(guard);
+    const foot = this.box(THREE, 0.5, 0.2, 0.95, M.dark);
+    foot.position.set(0, -0.1, 0.22);
+    this.edge(THREE, foot);
     ankle.add(foot);
+    const toeCap = this.box(THREE, 0.52, 0.16, 0.24, M.steel);
+    toeCap.position.set(0, -0.12, 0.62);
+    ankle.add(toeCap);
+    const sole = this.box(THREE, 0.54, 0.1, 1.02, M.rubber);
+    sole.position.set(0, -0.25, 0.22); // sole bottom at ankle − 0.30 = FOOT
+    ankle.add(sole);
     return { group, knee, ankle };
+  }
+
+  // foot trajectory over one cycle, c ∈ [0,1). Stance: heel pinned, toe-off at the end.
+  footState(c, P) {
+    const { S, sf, lift, toeMax } = P;
+    if (c < sf) {
+      const cs = c / sf;
+      const ts = Math.max(0, (cs - 0.8) / 0.2);
+      return { z: S * (1 - 2 * cs), th: toeMax * ts * ts, lift: 0 };
+    }
+    const u = (c - sf) / (1 - sf);
+    const us = u * u * (3 - 2 * u);
+    const tr = Math.max(0, 1 - u / 0.35);
+    return { z: -S + 2 * S * us, th: toeMax * tr * tr, lift: lift * Math.sin(Math.PI * u) };
+  }
+
+  // hip height above ground: vault over the stance leg; ballistic hop when airborne (run)
+  bodyH(c, P) {
+    const { S, sf, hop } = P;
+    let best = null;
+    for (const off of [0, 0.5]) {
+      const cl = (c + off) % 1;
+      if (cl < sf) {
+        const zoff = S * (1 - 2 * cl / sf);
+        const h = Math.sqrt(this.R * this.R - zoff * zoff);
+        best = best === null ? h : Math.min(best, h);
+      }
+    }
+    if (best === null) {
+      const ch = c % 0.5;
+      const u = (ch - sf) / (0.5 - sf);
+      best = Math.sqrt(this.R * this.R - S * S) + hop * Math.sin(Math.PI * u);
+    }
+    return best;
+  }
+
+  // 2-bone IK: pin the ankle to a world-space target, foot kept flat on the ground
+  placeLeg(leg, c, P, zc) {
+    const { L1, L2, FOOT, TOE } = this;
+    const fs = this.footState(c, P);
+    const th = fs.th;
+    // toe-off pivots the foot about the toe: raise + shift the ankle so the toe stays pinned
+    const y = FOOT * Math.cos(th) + TOE * Math.sin(th) + fs.lift;
+    const z = zc + fs.z + TOE * (1 - Math.cos(th)) - FOOT * Math.sin(th);
+    const hw = leg.group.getWorldPosition(this._v1);
+    const tl = this.body.worldToLocal(this._v2.set(hw.x, y, z));
+    const hp = leg.group.position;
+    const dy = tl.y - hp.y, dz = tl.z - hp.z;
+    let dist = Math.hypot(dy, dz);
+    dist = Math.max(0.4, Math.min(dist, L1 + L2 - 0.002));
+    const a = Math.atan2(dz, -dy);
+    const b = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + dist * dist - L2 * L2) / (2 * L1 * dist))));
+    const kb = Math.PI - Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + L2 * L2 - dist * dist) / (2 * L1 * L2))));
+    leg.group.rotation.x = -(a + b);
+    leg.knee.rotation.x = kb;
+    leg.ankle.rotation.x = -(this.body.rotation.x + leg.group.rotation.x + kb) + th;
+  }
+
+  swingArm(arm, s, c, g) {
+    const p = c * 2 * Math.PI;
+    const amp = 0.35 + g * 0.85;
+    const eb = 0.3 + g * 1.05;
+    arm.group.rotation.x = s * Math.cos(p) * amp;
+    arm.elbow.rotation.x = -eb * (0.55 - 0.45 * s * Math.cos(p));
   }
 
   animate(dt) {
     if (!this.robot) return;
     const g = this.state.gait / 100;
-    const freq = 2.0 + g * 5.5;
-    this.phase += dt * freq;
-    const p = this.phase;
+    const P = this.gaitParams(g);
+    this.cyc = (this.cyc + dt * P.f) % 1;
+    const c = this.cyc, p = c * 2 * Math.PI;
 
-    const legAmp = 0.45 + g * 0.55;
-    const kneeAmp = 0.55 + g * 1.15;
-    const armAmp = 0.35 + g * 0.9;
-    const elbowBend = 0.25 + g * 1.1;
-    const bounce = 0.05 + g * 0.32;
-    const lean = g * 0.34;
+    // ground scrolls at exactly the stance-foot speed → feet lock to the grid
+    this.scroll = (this.scroll + dt * P.speed) % this.gridStep;
+    this.grid.position.z = -this.scroll;
 
-    // ground scrolls toward the viewer, faster at higher gaits
-    if (this.grid) {
-      const groundSpeed = 1.5 + g * 9;
-      this.scroll = (this.scroll + dt * groundSpeed) % this.gridStep;
-      this.grid.position.z = -this.scroll;
-    }
+    this.body.position.y = this.FOOT + this.bodyH(c, P) + 1.35;
+    this.body.rotation.x = P.lean;
+    this.body.rotation.z = Math.sin(p) * 0.03 * (1 + g);
+    this.body.rotation.y = Math.sin(p) * 0.04 * (1 + g);
+    this.body.updateMatrixWorld(true);
 
-    const sinP = Math.sin(p);
+    const zc = -1.35 * Math.sin(P.lean); // stride center sits under the leaned hips
+    this.placeLeg(this.legL, c, P, zc);
+    this.placeLeg(this.legR, (c + 0.5) % 1, P, zc);
 
-    // legs (opposite phase)
-    this.swingLeg(this.legL, p, legAmp, kneeAmp);
-    this.swingLeg(this.legR, p + Math.PI, legAmp, kneeAmp);
-
-    // arms swing opposite to same-side leg
-    this.swingArm(this.armL, p + Math.PI, armAmp, elbowBend);
-    this.swingArm(this.armR, p, armAmp, elbowBend);
-
-    // body bob + forward lean + slight side sway
-    const bob = Math.abs(Math.sin(p)) * bounce;
-    this.body.position.y = 3.72 + bob - g * 0.12;
-    this.body.rotation.x = lean;
-    this.body.rotation.z = Math.sin(p) * 0.04 * (1 + g);
-    this.body.rotation.y = Math.sin(p) * 0.05 * (1 + g);
-    // subtle vertical hop for the whole rig at speed
-    this.robot.position.y = Math.max(0, Math.sin(p * 2)) * bounce * 0.5 * g;
-  }
-
-  swingLeg(leg, p, amp, kneeAmp) {
-    const s = Math.sin(p);
-    leg.group.rotation.x = s * amp;
-    // knee bends most as the leg lifts / passes under (during forward swing)
-    const bend = Math.max(0, Math.sin(p - 0.7));
-    leg.knee.rotation.x = bend * kneeAmp;
-    // ankle counter-rotates a touch to keep foot flat-ish
-    leg.ankle.rotation.x = -s * amp * 0.4;
-  }
-
-  swingArm(arm, p, amp, elbowBend) {
-    arm.group.rotation.x = Math.sin(p) * amp;
-    const bend = elbowBend * (0.5 + 0.5 * Math.max(0, Math.sin(p + 1.0)));
-    arm.elbow.rotation.x = -bend;
+    this.swingArm(this.armL, 1, c, g);
+    this.swingArm(this.armR, -1, c, g);
   }
 
   applyCam(camera) {
@@ -368,7 +519,7 @@ class Component extends DCLogic {
     window.addEventListener("touchend", up);
     el.addEventListener("wheel", (e) => {
       e.preventDefault();
-      this.cam.r = Math.max(5, Math.min(18, this.cam.r + e.deltaY * 0.01));
+      this.cam.r = Math.max(7, Math.min(18, this.cam.r + e.deltaY * 0.01));
     }, { passive: false });
   }
 }
