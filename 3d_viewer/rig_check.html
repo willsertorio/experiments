@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animal Rigging Checker — WASD-ready?</title>
+<style>
+  :root{
+    --bg:#0e1116;--panel:#161b22;--panel-2:#1c232c;--border:#2a323d;--text:#e6edf3;
+    --muted:#8b98a5;--accent:#4aa8ff;--accent-2:#6ee7b7;--pass:#3fb950;--fail:#f85149;--warn:#d29922;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #app{display:grid;grid-template-columns:340px 1fr;height:100vh}
+  /* sidebar */
+  aside{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+  .head{padding:14px 16px;border-bottom:1px solid var(--border)}
+  .head h1{margin:0;font-size:15px;font-weight:700}
+  .head p{margin:4px 0 0;font-size:11px;color:var(--muted)}
+  .summary{margin:10px 16px 0;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2);
+    font-size:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .summary b{font-size:18px}
+  .list{flex:1;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+  .card{border:1px solid var(--border);border-radius:10px;background:var(--panel-2);padding:10px 12px;cursor:pointer;
+    transition:border-color .15s,transform .05s}
+  .card:hover{border-color:var(--accent)}
+  .card.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .card .row1{display:flex;align-items:center;gap:8px}
+  .card .nm{font-weight:600;font-size:13px;text-transform:capitalize;flex:1;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .badge{font-size:10px;font-weight:700;letter-spacing:.05em;padding:3px 7px;border-radius:20px;white-space:nowrap}
+  .badge.pass{background:rgba(63,185,80,.15);color:var(--pass);border:1px solid rgba(63,185,80,.35)}
+  .badge.fail{background:rgba(248,81,73,.15);color:var(--fail);border:1px solid rgba(248,81,73,.35)}
+  .card .stats{margin-top:7px;display:flex;gap:12px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+  .card .stats span b{color:var(--text)}
+  /* viewport */
+  main{position:relative;min-width:0}
+  canvas{display:block;width:100%;height:100%}
+  .toolbar{position:absolute;top:12px;left:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:5}
+  .btn{height:32px;padding:0 12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:12px;
+    border:1px solid var(--border);background:rgba(28,35,44,.9);backdrop-filter:blur(6px);color:var(--text);
+    display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{border-color:var(--accent)}
+  .btn.on{background:var(--accent);border-color:var(--accent);color:#0b1220}
+  .detail{position:absolute;right:12px;top:12px;width:280px;z-index:5;
+    background:rgba(22,27,34,.92);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;
+    padding:14px;font-size:12px}
+  .detail h2{margin:0 0 4px;font-size:14px;text-transform:capitalize}
+  .verdict{font-size:11px;font-weight:700;letter-spacing:.05em;padding:4px 8px;border-radius:6px;display:inline-block;margin-bottom:10px}
+  .verdict.pass{background:rgba(63,185,80,.15);color:var(--pass)}
+  .verdict.fail{background:rgba(248,81,73,.15);color:var(--fail)}
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--border)}
+  .kv:first-of-type{border-top:none}
+  .kv .k{color:var(--muted)}
+  .kv .v{font-weight:600;text-align:right}
+  .kv .v.yes{color:var(--pass)}
+  .kv .v.no{color:var(--fail)}
+  .kv .v.warn{color:var(--warn)}
+  .note{margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--panel-2);border:1px solid var(--border);
+    color:var(--muted);font-size:11px;line-height:1.45}
+  .hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:5;
+    background:rgba(22,27,34,.9);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:20px;
+    padding:8px 16px;font-size:11px;color:var(--muted);letter-spacing:.04em}
+  .hint b{color:var(--accent-2)}
+  #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:10;
+    background:var(--bg);font-size:13px;color:var(--muted)}
+  kbd{background:var(--panel-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;
+    padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--text)}
+</style>
+<!-- three.js is vendored locally under ./vendor/ so this page works fully offline (no CDN). -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <div class="head">
+      <h1>🦴 Animal Rigging Checker</h1>
+      <p>Loads <code>assets/Animals.glb</code> and reports whether each animal is rigged (skinned + skeleton) and ready to drive.</p>
+    </div>
+    <div class="summary" id="summary">Analyzing…</div>
+    <div class="list" id="list"></div>
+  </aside>
+  <main>
+    <div class="toolbar">
+      <button class="btn" id="btnSkel">🦴 Skeleton</button>
+      <button class="btn" id="btnWire">▦ Wireframe</button>
+      <button class="btn on" id="btnSpin">↻ Auto-rotate</button>
+      <button class="btn" id="btnDrive">🎮 WASD drive</button>
+    </div>
+    <div class="detail" id="detail"></div>
+    <div class="hint" id="hint">Click an animal on the left to inspect it</div>
+    <div id="loading">Loading Animals.glb…</div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const listEl = document.getElementById('list');
+const summaryEl = document.getElementById('summary');
+const detailEl = document.getElementById('detail');
+const hintEl = document.getElementById('hint');
+const loadingEl = document.getElementById('loading');
+
+// --- three.js setup ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1116);
+const main = document.querySelector('main');
+const camera = new THREE.PerspectiveCamera(45, main.clientWidth/main.clientHeight, 0.01, 1000);
+camera.position.set(2.4, 1.8, 3.2);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(main.clientWidth, main.clientHeight);
+main.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 0.6, 0);
+
+// lights
+scene.add(new THREE.HemisphereLight(0xffffff, 0x2a323d, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(3,5,4); scene.add(key);
+const rim = new THREE.DirectionalLight(0x88bbff, 0.8); rim.position.set(-4,2,-3); scene.add(rim);
+
+// ground grid
+const grid = new THREE.GridHelper(20, 40, 0x2a323d, 0x1c232c);
+grid.position.y = 0; scene.add(grid);
+
+// state
+let animals = [];          // {name, group, skinned:[], bones, verts, rigged, box}
+let current = null;        // active animal object
+let skelHelpers = [];      // SkeletonHelper per current
+let spin = true, drive = false, wire = false, showSkel = false;
+
+// --- load GLB ---
+const loader = new GLTFLoader();
+loader.load('assets/Animals.glb', (gltf) => {
+  const root = gltf.scene;
+  const clips = gltf.animations || [];
+  scene.add(root);
+
+  // each direct child of the scene is one animal
+  for (const child of [...root.children]) {
+    const skinned = [];
+    let verts = 0, hasJoints = false, hasWeights = false;
+    const boneSet = new Set();
+    child.traverse(o => {
+      if (o.isSkinnedMesh) {
+        skinned.push(o);
+        if (o.skeleton) o.skeleton.bones.forEach(b => boneSet.add(b));
+        const g = o.geometry;
+        if (g.attributes.position) verts += g.attributes.position.count;
+        if (g.attributes.skinIndex) hasJoints = true;
+        if (g.attributes.skinWeight) hasWeights = true;
+      }
+    });
+    const rigged = skinned.length > 0 && boneSet.size > 0 && hasJoints && hasWeights;
+    animals.push({
+      name: child.name || 'unnamed',
+      group: child, skinned,
+      bones: boneSet.size, verts,
+      hasJoints, hasWeights, rigged,
+      clips: clips.filter(c => c._belongsTo === child) // usually none
+    });
+    child.visible = false; // show one at a time
+  }
+
+  buildList(clips.length);
+  loadingEl.style.display = 'none';
+  if (animals.length) select(animals[0]);
+});
+
+function buildList(totalClips){
+  const rc = animals.filter(a=>a.rigged).length;
+  summaryEl.innerHTML =
+    `<span><b style="color:var(--pass)">${rc}</b>/${animals.length}<br><span style="color:var(--muted)">rigged</span></span>`+
+    `<span><b>${totalClips}</b><br><span style="color:var(--muted)">anim clips</span></span>`+
+    `<span style="flex:1;font-size:11px;color:${totalClips? 'var(--pass)':'var(--warn)'}">`+
+      (totalClips? 'Has baked animations.' : 'Rigs present, but no baked walk/idle clips — you\'ll animate procedurally or import clips.')+
+    `</span>`;
+
+  listEl.innerHTML = '';
+  for (const a of animals){
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML =
+      `<div class="row1"><span class="nm">${a.name}</span>`+
+      `<span class="badge ${a.rigged?'pass':'fail'}">${a.rigged?'✓ RIGGED':'✕ NOT RIGGED'}</span></div>`+
+      `<div class="stats"><span>bones <b>${a.bones}</b></span>`+
+      `<span>skinned meshes <b>${a.skinned.length}</b></span>`+
+      `<span>verts <b>${a.verts.toLocaleString()}</b></span></div>`;
+    el.addEventListener('click', ()=>select(a, el));
+    a._el = el;
+    listEl.appendChild(el);
+  }
+}
+
+function clearSkel(){ skelHelpers.forEach(h=>scene.remove(h)); skelHelpers=[]; }
+
+function select(a){
+  if (current){ current.group.visible = false; }
+  document.querySelectorAll('.card').forEach(c=>c.classList.remove('active'));
+  if (a._el) a._el.classList.add('active');
+  current = a;
+  a.group.visible = true;
+
+  // recenter / scale to fit
+  a.group.position.set(0,0,0);
+  a.group.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(a.group);
+  const size = box.getSize(new THREE.Vector3());
+  const centre = box.getCenter(new THREE.Vector3());
+  a.group.position.sub(centre);                 // center at origin
+  a.group.position.y += size.y/2;               // sit on ground
+  controls.target.set(0, size.y/2, 0);
+  const dist = Math.max(size.x, size.y, size.z) * 2.2;
+  camera.position.set(dist*0.7, size.y*0.9, dist);
+  controls.update();
+
+  clearSkel(); showSkelUpdate();
+  applyWire();
+  renderDetail(a);
+}
+
+function showSkelUpdate(){
+  clearSkel();
+  if (showSkel && current){
+    const h = new THREE.SkeletonHelper(current.group);
+    h.material.linewidth = 2;
+    scene.add(h); skelHelpers.push(h);
+  }
+}
+
+function applyWire(){
+  animals.forEach(a=>a.skinned.forEach(m=>{
+    const mats = Array.isArray(m.material)?m.material:[m.material];
+    mats.forEach(mat=>{ mat.wireframe = wire; });
+  }));
+}
+
+function renderDetail(a){
+  detailEl.innerHTML =
+    `<h2>${a.name}</h2>`+
+    `<div class="verdict ${a.rigged?'pass':'fail'}">${a.rigged?'RIGGED — WASD-ready':'NOT RIGGED'}</div>`+
+    `<div class="kv"><span class="k">Skinned mesh</span><span class="v ${a.skinned.length?'yes':'no'}">${a.skinned.length?'yes ('+a.skinned.length+')':'no'}</span></div>`+
+    `<div class="kv"><span class="k">Skeleton bones</span><span class="v ${a.bones?'yes':'no'}">${a.bones}</span></div>`+
+    `<div class="kv"><span class="k">skinIndex (JOINTS_0)</span><span class="v ${a.hasJoints?'yes':'no'}">${a.hasJoints?'yes':'no'}</span></div>`+
+    `<div class="kv"><span class="k">skinWeight (WEIGHTS_0)</span><span class="v ${a.hasWeights?'yes':'no'}">${a.hasWeights?'yes':'no'}</span></div>`+
+    `<div class="kv"><span class="k">Vertices</span><span class="v">${a.verts.toLocaleString()}</span></div>`+
+    `<div class="kv"><span class="k">Baked anim clips</span><span class="v ${a.clips.length?'yes':'warn'}">${a.clips.length||'0 (none)'}</span></div>`+
+    `<div class="note">${a.rigged
+      ? 'This model has a bone hierarchy and per-vertex skin weights, so it can be posed/animated for a WASD controller. It ships with no walk/idle clip — drive the bones procedurally or attach animation clips.'
+      : 'No skeleton or skin weights detected — this mesh can only be moved as a rigid object.'}</div>`;
+}
+
+// --- toolbar ---
+const btnSkel=document.getElementById('btnSkel'), btnWire=document.getElementById('btnWire'),
+      btnSpin=document.getElementById('btnSpin'), btnDrive=document.getElementById('btnDrive');
+btnSkel.onclick=()=>{showSkel=!showSkel;btnSkel.classList.toggle('on',showSkel);showSkelUpdate();};
+btnWire.onclick=()=>{wire=!wire;btnWire.classList.toggle('on',wire);applyWire();};
+btnSpin.onclick=()=>{spin=!spin;btnSpin.classList.toggle('on',spin);};
+btnDrive.onclick=()=>{
+  drive=!drive;btnDrive.classList.toggle('on',drive);
+  spin=false;btnSpin.classList.remove('on');
+  controls.enabled=!drive;
+  hintEl.innerHTML = drive
+    ? 'Drive mode: <b>W</b>/<b>A</b>/<b>S</b>/<b>D</b> to move · the animal turns to face travel'
+    : 'Click an animal on the left to inspect it';
+  if(drive && current){ current.group.position.set(0,current.group.position.y,0); vel.set(0,0,0); }
+};
+
+// --- WASD drive preview ---
+const keys={};
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+const vel=new THREE.Vector3();
+let heading=0, bob=0;
+
+function driveStep(dt){
+  if(!drive || !current) return;
+  const a=(keys['a']?1:0)-(keys['d']?1:0);
+  const f=(keys['w']?1:0)-(keys['s']?1:0);
+  const dir=new THREE.Vector3(-a,0,-f);
+  const speed=2.2;
+  if(dir.lengthSq()>0){
+    dir.normalize();
+    heading=Math.atan2(dir.x,dir.z);
+    vel.lerp(dir.multiplyScalar(speed),0.15);
+    bob+=dt*10;
+  } else { vel.lerp(new THREE.Vector3(),0.2); bob=0; }
+  const g=current.group;
+  g.position.x+=vel.x*dt; g.position.z+=vel.z*dt;
+  g.rotation.y=heading;
+  g.position.y = current._groundY + Math.abs(Math.sin(bob))*0.05*Math.min(vel.length(),1);
+  // camera chase
+  const camOff=new THREE.Vector3(0,1.4,3.0).applyAxisAngle(new THREE.Vector3(0,1,0),heading);
+  camera.position.lerp(g.position.clone().add(camOff),0.08);
+  controls.target.lerp(g.position.clone().setY(g.position.y+0.4),0.15);
+}
+
+// remember resting Y after select
+const _select=select;
+select=function(a){ _select(a); a._groundY=a.group.position.y; };
+
+// --- render loop ---
+const clock=new THREE.Clock();
+function tick(){
+  const dt=Math.min(clock.getDelta(),0.05);
+  if(spin && current){ current.group.rotation.y += dt*0.5; }
+  driveStep(dt);
+  controls.update();
+  renderer.render(scene,camera);
+  requestAnimationFrame(tick);
+}
+tick();
+
+addEventListener('resize',()=>{
+  camera.aspect=main.clientWidth/main.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(main.clientWidth,main.clientHeight);
+});
+</script>
+</body>
+</html>
