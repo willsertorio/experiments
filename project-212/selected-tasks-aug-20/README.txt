@@ -77,6 +77,33 @@ BUNDLED BUILDS
   All fourteen builds still pull three.js, Tailwind, GSAP, Google Fonts
   and their HDRIs from CDNs, so they need a network connection.
 
-Videos, screenshots and artifact zips are signed Active Storage URLs on
+VIDEOS
+------
+The airplane (308387) and armoury (308386) asset videos are bundled with
+the viewer as local files:
+
+    apps/308387-airplane/video.mp4      2.0 MB
+    apps/308386-armor/video.mp4         1.1 MB
+
+They came from plane-high.mp4 (130 MB) and armor-high.mp4 (118 MB), which
+were recorded at ~110-120 Mbps — far past what the footage needs. Both
+were re-encoded at CRF 20 with faststart, keeping the original resolution
+and 60 fps. Measured SSIM against the originals is 0.990 and 0.989, so
+the difference isn't visible at normal viewing size, and the modal now
+starts playing instantly instead of buffering.
+
+The other five tasks still play their videos from the export URLs.
+
+To swap one later: drop a new .mp4 into that task's apps/ folder and point
+its line in VIDEO_OVERRIDES (top of the <script> in index.html) at the new
+filename. Adding a task id there overrides its export video; removing the
+line restores it.
+
+  const VIDEO_OVERRIDES = {
+    308387: 'apps/308387-airplane/video.mp4',
+    308386: 'apps/308386-armor/video.mp4',
+  };
+
+Screenshots and the remaining videos are signed Active Storage URLs on
 api.data-labeling.revelo.com — be signed in to the labeling app in the
 same browser, or they won't load. Signatures expire in August 2027.
