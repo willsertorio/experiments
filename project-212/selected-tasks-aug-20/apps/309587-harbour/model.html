@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HarbourLab — Swell & Breakwater Simulator · Phase 01</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 20c4-6 8-6 12 0s8 6 12 0' stroke='%2322d3ee' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  html, body { height: 100%; }
+  body { font-family: 'Space Grotesk', system-ui, sans-serif; background: #0b141a; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ---- custom range sliders ---- */
+  input[type=range].hl { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; }
+  input[type=range].hl::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: linear-gradient(90deg, rgba(34,211,238,.75), rgba(34,211,238,.15)); }
+  input[type=range].hl::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #22d3ee; margin-top: -5.5px; border: 2px solid #062a33; box-shadow: 0 0 12px rgba(34,211,238,.8); }
+  input[type=range].hl::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(34,211,238,.25); }
+  input[type=range].hl::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #22d3ee; border: 2px solid #062a33; }
+
+  .panel-scroll::-webkit-scrollbar { width: 4px; }
+  .panel-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.25); border-radius: 2px; }
+
+  /* ---- floating 3D gauge label ---- */
+  #gaugeLabel {
+    transform: translate(-50%, -118%);
+    transition: opacity .25s;
+    pointer-events: none;
+    filter: drop-shadow(0 6px 16px rgba(0,0,0,.55));
+  }
+  #gaugeLabel::after {
+    content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px;
+    background: rgba(8,25,32,.92); border-right: 1px solid rgba(34,211,238,.45); border-bottom: 1px solid rgba(34,211,238,.45);
+    transform: translateX(-50%) rotate(45deg);
+  }
+
+  .live-dot { position: relative; }
+  .live-dot::after { content:''; position:absolute; inset:-4px; border-radius:50%; border:1px solid #34d399; animation: ping 1.6s cubic-bezier(0,0,.2,1) infinite; }
+  @keyframes ping { 0%{transform:scale(.6);opacity:.9} 100%{transform:scale(1.9);opacity:0} }
+
+  kbd { font-family:'JetBrains Mono',monospace; font-size:10px; padding:2px 6px; border-radius:5px; border:1px solid rgba(148,163,184,.3); border-bottom-width:2px; background:rgba(148,163,184,.08); color:#cbd5e1; }
+
+  .preset-btn { transition: all .15s; }
+  .preset-btn:hover { border-color: rgba(34,211,238,.6); color: #a5f3fc; }
+  .preset-btn.active { border-color: #22d3ee; color: #22d3ee; background: rgba(34,211,238,.08); }
+
+  #loader .bar { animation: load 1.4s ease-in-out infinite; }
+  @keyframes load { 0%{transform:translateX(-110%)} 100%{transform:translateX(320%)} }
+
+  #compassArrow { transform-box: fill-box; transform-origin: center; transition: transform .1s linear; }
+</style>
+</head>
+<body class="overflow-hidden text-slate-100 select-none">
+
+<canvas id="scene" class="fixed inset-0 w-full h-full block"></canvas>
+
+<!-- cinematic vignette -->
+<div class="pointer-events-none fixed inset-0 z-10" style="background: radial-gradient(ellipse at 50% 42%, transparent 55%, rgba(3,10,14,.55) 100%);"></div>
+
+<!-- ============ BRAND ============ -->
+<header class="fixed top-5 left-6 z-20 pointer-events-none">
+  <div class="flex items-center gap-3">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+      <path d="M2 21c4-6 8-6 12 0s8 6 12 0" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M2 27c4-6 8-6 12 0s8 6 12 0" stroke="#155e75" stroke-width="2.5" stroke-linecap="round"/>
+      <rect x="22" y="4" width="3.5" height="12" rx="1" fill="#e2e8f0"/>
+      <circle cx="23.75" cy="4" r="2" fill="#f87171"/>
+    </svg>
+    <div>
+      <h1 class="text-[15px] font-bold tracking-[0.22em] text-white leading-none">HARBOUR<span class="text-cyan-400">LAB</span></h1>
+      <p class="text-[9.5px] tracking-[0.3em] text-slate-400 mt-1">SWELL &amp; BREAKWATER SIMULATOR · PHASE 01</p>
+    </div>
+  </div>
+</header>
+
+<!-- ============ LEFT : SEA STATE + BREAKWATER ============ -->
+<aside class="fixed left-6 top-24 z-20 w-[268px] max-h-[calc(100vh-170px)] overflow-y-auto panel-scroll rounded-2xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-2xl">
+  <div class="p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-[10px] font-semibold tracking-[0.28em] text-slate-400">SEA STATE</h2>
+      <button id="pauseBtn" class="mono text-[10px] px-2.5 py-1 rounded-md border border-white/15 hover:border-cyan-400/60 hover:text-cyan-300 transition-colors">II&nbsp;PAUSE</button>
+    </div>
+
+    <!-- swell height -->
+    <label class="block mb-4">
+      <div class="flex justify-between text-[10px] tracking-[0.18em] text-slate-400 mb-1">
+        <span>SWELL HEIGHT</span><span id="ampVal" class="mono text-cyan-300 text-[11px]">1.40 m</span>
+      </div>
+      <input id="amp" type="range" min="0" max="4" step="0.05" value="1.4" class="hl">
+    </label>
+
+    <!-- swell direction -->
+    <label class="block mb-1">
+      <div class="flex justify-between text-[10px] tracking-[0.18em] text-slate-400 mb-1">
+        <span>SWELL HEADING</span><span id="dirVal" class="mono text-cyan-300 text-[11px]">000°</span>
+      </div>
+    </label>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="flex-1"><input id="dir" type="range" min="0" max="360" step="1" value="0" class="hl"></div>
+      <svg width="46" height="46" viewBox="0 0 46 46" class="shrink-0">
+        <circle cx="23" cy="23" r="19" fill="rgba(8,25,32,.7)" stroke="rgba(148,163,184,.25)"/>
+        <text x="23" y="9.5" text-anchor="middle" font-size="7" fill="#64748b" font-family="JetBrains Mono">N</text>
+        <g id="compassArrow">
+          <path d="M23 12 L27 28 L23 25 L19 28 Z" fill="#22d3ee"/>
+        </g>
+        <circle cx="23" cy="23" r="2" fill="#0e7490"/>
+      </svg>
+    </div>
+    <p class="text-[9.5px] text-slate-500 -mt-2 mb-4 tracking-wide">000° = travelling onshore, toward the quay</p>
+
+    <!-- wavelength -->
+    <label class="block mb-4">
+      <div class="flex justify-between text-[10px] tracking-[0.18em] text-slate-400 mb-1">
+        <span>WAVELENGTH</span>
+        <span class="mono text-[11px]"><span id="lenVal" class="text-cyan-300">90 m</span> <span class="text-slate-500">· T ≈</span> <span id="periodVal" class="text-slate-300">7.6 s</span></span>
+      </div>
+      <input id="len" type="range" min="30" max="160" step="1" value="90" class="hl">
+    </label>
+
+    <!-- presets -->
+    <div class="grid grid-cols-3 gap-2 mb-1">
+      <button data-preset="calm"  class="preset-btn mono text-[9.5px] tracking-widest py-1.5 rounded-md border border-white/15 text-slate-400">CALM</button>
+      <button data-preset="moderate" class="preset-btn active mono text-[9.5px] tracking-widest py-1.5 rounded-md border border-white/15 text-slate-400">MODERATE</button>
+      <button data-preset="storm" class="preset-btn mono text-[9.5px] tracking-widest py-1.5 rounded-md border border-white/15 text-slate-400">STORM</button>
+    </div>
+  </div>
+
+  <div class="border-t border-white/10 p-5">
+    <h2 class="text-[10px] font-semibold tracking-[0.28em] text-slate-400 mb-1">BREAKWATER</h2>
+    <p class="text-[10px] text-slate-500 mb-4 leading-relaxed">Grab the structure <span class="text-cyan-300/90">directly in the 3D view</span> and drag it across the water. Watch the lee zone open up behind it.</p>
+    <label class="block mb-4">
+      <div class="flex justify-between text-[10px] tracking-[0.18em] text-slate-400 mb-1">
+        <span>ORIENTATION</span><span id="angleVal" class="mono text-cyan-300 text-[11px]">−12°</span>
+      </div>
+      <input id="angle" type="range" min="-90" max="90" step="1" value="-12" class="hl">
+    </label>
+    <button id="resetBtn" class="w-full mono text-[10px] tracking-[0.2em] py-2 rounded-md border border-white/15 hover:border-cyan-400/60 hover:text-cyan-300 transition-colors">RESET POSITION</button>
+  </div>
+</aside>
+
+<!-- ============ RIGHT : QUAY GAUGE ============ -->
+<aside class="fixed right-6 top-24 z-20 w-[272px] rounded-2xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-2xl hidden md:block">
+  <div class="p-5">
+    <div class="flex items-center justify-between mb-1">
+      <h2 class="text-[10px] font-semibold tracking-[0.28em] text-slate-400">QUAY WAVE GAUGE</h2>
+      <span class="flex items-center gap-2 text-[9px] mono tracking-widest text-emerald-400"><span class="live-dot w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>LIVE</span>
+    </div>
+    <p class="text-[9.5px] text-slate-500 mb-3 tracking-wide">STATION Q-01 · STAFF GAUGE ON QUAY WALL</p>
+
+    <div class="flex items-end gap-2 mb-1">
+      <span id="gaugeNum" class="mono text-[38px] leading-none font-bold text-white">0.00</span>
+      <span class="mono text-sm text-slate-400 pb-1">m</span>
+    </div>
+    <div class="flex gap-4 text-[10px] mono mb-3">
+      <span class="text-slate-500">OFFSHORE <span id="offNum" class="text-slate-300">0.00 m</span></span>
+      <span class="text-slate-500">SHELTERING <span id="shelterPct" class="text-cyan-300">0%</span></span>
+    </div>
+
+    <div class="rounded-lg border border-white/10 bg-black/30 p-2 mb-3">
+      <canvas id="chart" class="w-full h-16 block"></canvas>
+      <div class="flex justify-between text-[8.5px] mono text-slate-600 mt-1 px-0.5">
+        <span>−20 s</span><span class="text-slate-500">WAVE HEIGHT @ QUAY (CYAN) vs OFFSHORE (WHITE)</span><span>NOW</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <div class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+        <div class="text-[8.5px] tracking-[0.2em] text-slate-500 mb-0.5">HMAX · 20 S</div>
+        <div id="hmaxVal" class="mono text-sm text-slate-200">0.00 m</div>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+        <div class="text-[8.5px] tracking-[0.2em] text-slate-500 mb-0.5">MEAN · 20 S</div>
+        <div id="meanVal" class="mono text-sm text-slate-200">0.00 m</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- floating label anchored to the 3D gauge pole -->
+<div id="gaugeLabel" class="fixed z-20 left-0 top-0 opacity-0">
+  <div class="rounded-lg border border-cyan-400/40 bg-[#081920]/95 px-3 py-1.5 text-center">
+    <div class="text-[8px] tracking-[0.25em] text-cyan-300/80 mono">QUAY&nbsp;Q-01</div>
+    <div class="mono text-[15px] font-bold text-white leading-tight"><span id="gaugeLabelVal">0.00</span><span class="text-[10px] text-slate-400"> m</span></div>
+  </div>
+</div>
+
+<!-- ============ FOOTER ============ -->
+<footer class="fixed bottom-5 left-6 z-20 pointer-events-none">
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-slate-400">
+    <span><kbd>DRAG</kbd> breakwater to reposition</span>
+    <span><kbd>L-DRAG</kbd> orbit</span>
+    <span><kbd>WHEEL</kbd> zoom</span>
+    <span><kbd>SPACE</kbd> pause</span>
+  </div>
+</footer>
+
+<div class="fixed bottom-5 right-6 z-20 pointer-events-none text-right hidden md:block">
+  <p class="mono text-[9px] leading-relaxed text-slate-500">PHASE-2 READY · WATER SURFACE QUERYABLE<br><span class="text-cyan-400/70">window.Harbor.sampleWater(x, z) → { height, normal, attenuation }</span></p>
+</div>
+
+<!-- ============ LOADER ============ -->
+<div id="loader" class="fixed inset-0 z-50 grid place-items-center bg-[#0b141a]">
+  <div class="text-center">
+    <svg width="44" height="44" viewBox="0 0 32 32" fill="none" class="mx-auto mb-4">
+      <path d="M2 21c4-6 8-6 12 0s8 6 12 0" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M2 27c4-6 8-6 12 0s8 6 12 0" stroke="#155e75" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <p class="mono text-[10px] tracking-[0.35em] text-slate-400 mb-3">INITIALIZING HARBOUR SIMULATION</p>
+    <div class="w-44 h-[3px] mx-auto rounded-full bg-white/10 overflow-hidden"><div class="bar h-full w-1/3 rounded-full bg-cyan-400"></div></div>
+    <p id="loaderMsg" class="mono text-[9px] text-slate-600 mt-3">loading three.js modules…</p>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+
+const el = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+
+/* ================================================================
+   SECTION 1 — SIMULATION STATE
+   The swell parameters are smoothed toward UI targets each frame so
+   the sea surface never pops when sliders move.
+================================================================ */
+const swell = {
+  amp: 1.4,  ampT: 1.4,     // significant amplitude (m)
+  dir: 0,    dirT: 0,       // heading (rad) waves travel TOWARD. 0 = +z (onshore)
+  len: 90,   lenT: 90       // wavelength (m)
+};
+let simT = 0, paused = false;
+
+/* ================================================================
+   SECTION 2 — ANALYTIC WAVE FIELD  ★ PHASE-2 CRITICAL ★
+   ---------------------------------------------------------------
+   The water surface is defined by a PURE FUNCTION of (x, z, t):
+   a sum of directional sinusoids (deep-water dispersion ω=√gk),
+   modulated by breakwater sheltering. The SAME function displaces
+   the render mesh AND is exposed via window.Harbor.sampleWater()
+   so phase-2 boats can query exact buoyancy at any hull point.
+   (Sines, not Gerstner: Gerstner displaces x/z which would make
+   h(x,z,t) non-invertible — a deliberate choice for queryability.)
+================================================================ */
+const comps = [0, 1, 2, 3].map(() => ({ A: 0, kx: 0, kz: 0, w: 1, phi: 0 }));
+let Ux = 0, Uz = -1; // upwind unit vector (world xz) — where swell comes FROM
+
+function setComp(i, A, L, headingRad, phi) {
+  const c = comps[i], k = 2 * Math.PI / L;
+  c.A = A;
+  c.kx = k * Math.sin(headingRad);
+  c.kz = k * Math.cos(headingRad);
+  c.w = Math.sqrt(9.81 * k); // deep-water dispersion
+  c.phi = phi;
+}
+function updateComponents() {
+  const A = swell.amp, th = swell.dir, L = swell.len;
+  setComp(0, A,        L,                        th,        0);
+  setComp(1, A * 0.22, Math.max(L * 0.36, 20),   th + 0.45, 2.1);
+  setComp(2, A * 0.10, Math.max(L * 0.22, 13),   th - 0.62, 4.4);
+  setComp(3, A * 0.05, 11,                       th + 1.15, 1.3);
+  Ux = -Math.sin(th); Uz = -Math.cos(th);
+}
+updateComponents();
+
+/* ---- breakwater registry (transforms feed the shelter model) ---- */
+const breakwaters = []; // { x, z, rot, hl, hw, group }
+
+/* distance: ray (p + t·r, t≥0) vs segment (a→b), 2D — for penumbra */
+function raySegDist(px, pz, rx, rz, ax, az, bx, bz) {
+  const TMAX = 600;
+  const ex = bx - ax, ez = bz - az;
+  const ux = px - ax, uz = pz - az;
+  const ee = ex * ex + ez * ez;
+  const q = rx * ex + rz * ez;
+  const a1 = rx * ux + rz * uz;
+  const b1 = ex * ux + ez * uz;
+  let best = Infinity;
+  const denom = ee - q * q;
+  if (denom > 1e-9) {
+    const s = (b1 - a1 * q) / denom, t = s * q - a1;
+    if (s >= 0 && s <= 1 && t >= 0 && t <= TMAX) {
+      best = Math.hypot(ux + t * rx - s * ex, uz + t * rz - s * ez);
+    }
+  }
+  let t = clamp(-a1, 0, TMAX);
+  best = Math.min(best, Math.hypot(ux + t * rx, uz + t * rz));           // endpoint a
+  t = clamp(q - a1, 0, TMAX);
+  best = Math.min(best, Math.hypot(ux - ex + t * rx, uz - ez + t * rz)); // endpoint b
+  const s2 = clamp(-b1 / ee, 0, 1);
+  best = Math.min(best, Math.hypot(ux - s2 * ex, uz - s2 * ez));         // ray origin vs segment
+  return best;
+}
+function rayRectDist(px, pz, rx, rz, hl, hw) {
+  let d = raySegDist(px, pz, rx, rz, -hl, -hw,  hl, -hw);
+  d = Math.min(d, raySegDist(px, pz, rx, rz,  hl, -hw,  hl,  hw));
+  d = Math.min(d, raySegDist(px, pz, rx, rz,  hl,  hw, -hl,  hw));
+  d = Math.min(d, raySegDist(px, pz, rx, rz, -hl,  hw, -hl, -hw));
+  return d;
+}
+
+/* Shelter multiplier at (x,z): 1 = open sea, →0.15 deep in the lee.
+   Casts an upwind ray against each breakwater rectangle (2D OBB);
+   umbra decays exponentially behind the structure, with a soft
+   diffraction penumbra at the shadow edges. */
+const SHADOW_LEN = 150, SHELTER_STRENGTH = 0.85, PENUMBRA = 12;
+function computeShelter(x, z) {
+  let att = 1;
+  for (let i = 0; i < breakwaters.length; i++) {
+    const bw = breakwaters[i];
+    const dx = x - bw.x, dz = z - bw.z;
+    const c = Math.cos(bw.rot), s = Math.sin(bw.rot);
+    const lx = dx * c + dz * s, lz = -dx * s + dz * c; // world→local
+    const qx = Math.abs(lx) - bw.hl, qz = Math.abs(lz) - bw.hw;
+    const sd = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0);
+    if (sd > 320) continue;
+    const ux = Ux * c + Uz * s, uz = -Ux * s + Uz * c; // upwind dir, local
+    const decay = Math.exp(-Math.max(sd, 0) / SHADOW_LEN);
+    let edge = 0, ok = true;
+    let tmin = -1e9, tmax = 1e9;
+    if (Math.abs(ux) < 1e-8) { if (Math.abs(lx) > bw.hl) ok = false; }
+    else { const t1 = (-bw.hl - lx) / ux, t2 = (bw.hl - lx) / ux;
+           tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2)); }
+    if (ok) {
+      if (Math.abs(uz) < 1e-8) { if (Math.abs(lz) > bw.hw) ok = false; }
+      else { const t1 = (-bw.hw - lz) / uz, t2 = (bw.hw - lz) / uz;
+             tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2)); }
+    }
+    if (ok && tmax >= Math.max(tmin, 0)) edge = 1;
+    else {
+      const d = rayRectDist(lx, lz, ux, uz, bw.hl, bw.hw);
+      if (d < PENUMBRA) edge = 1 - d / PENUMBRA;
+    }
+    if (edge > 0) att *= 1 - SHELTER_STRENGTH * edge * decay;
+  }
+  return att;
+}
+
+/* The single source of truth for the sea surface. Reused per-vertex
+   via the module-scope `_w` object (zero allocation in the hot loop). */
+const _w = { h: 0, sx: 0, sz: 0, att: 1, attEff: 1 };
+function waveAt(x, z, t, out) {
+  const att = breakwaters.length ? computeShelter(x, z) : 1;
+  // shelter susceptibility per component: swell stays shadowed,
+  // short local chop partially regenerates behind the structure
+  const f1 = att, f2 = Math.sqrt(att), f3 = Math.sqrt(f2), f4 = Math.sqrt(f3);
+  let h = 0, sx = 0, sz = 0, aw = 0, asum = 0;
+  for (let i = 0; i < 4; i++) {
+    const c = comps[i];
+    const f = i === 0 ? f1 : i === 1 ? f2 : i === 2 ? f3 : f4;
+    const Ac = c.A * f;
+    const ph = c.kx * x + c.kz * z - c.w * t + c.phi;
+    const sn = Math.sin(ph), cs = Math.cos(ph);
+    h += Ac * sn;
+    sx += Ac * c.kx * cs;   // ∂h/∂x (analytic — drives normals & buoyancy torque later)
+    sz += Ac * c.kz * cs;   // ∂h/∂z
+    aw += Ac; asum += c.A;
+  }
+  out.h = h; out.sx = sx; out.sz = sz;
+  out.att = att;
+  out.attEff = asum > 1e-6 ? aw / asum : 1;
+}
+
+/* ================================================================
+   SECTION 3 — RENDERER / SCENE / SKY / LIGHTS
+================================================================ */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: el('scene'), antialias: true });
+} catch (e) {
+  el('loaderMsg').textContent = 'WebGL unavailable in this browser.';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.62;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xa3b8c2, 500, 2600);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1, 6000);
+camera.position.set(-320, 195, -390); // intro start, eases to home
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(10, 0, -20);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 40;
+controls.maxDistance = 620;
+controls.maxPolarAngle = 1.45;
+controls.minPolarAngle = 0.12;
+
+// --- sky + sun + image-based environment ---
+const sun = new THREE.Vector3();
+{
+  const phi = THREE.MathUtils.degToRad(90 - 26);
+  const theta = THREE.MathUtils.degToRad(168);
+  sun.setFromSphericalCoords(1, phi, theta);
+}
+const sky = new Sky();
+sky.scale.setScalar(4000);
+sky.material.uniforms.turbidity.value = 6;
+sky.material.uniforms.rayleigh.value = 1.4;
+sky.material.uniforms.mieCoefficient.value = 0.004;
+sky.material.uniforms.mieDirectionalG.value = 0.8;
+sky.material.uniforms.sunPosition.value.copy(sun);
+scene.add(sky);
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(scene).texture; // sky only in scene so far
+  pmrem.dispose();
+}
+const sunLight = new THREE.DirectionalLight(0xfff2dd, 2.1);
+sunLight.position.copy(sun).multiplyScalar(420);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.left = -280; sunLight.shadow.camera.right = 280;
+sunLight.shadow.camera.top = 280;   sunLight.shadow.camera.bottom = -280;
+sunLight.shadow.camera.near = 10;   sunLight.shadow.camera.far = 1000;
+sunLight.shadow.bias = -0.0004;
+sunLight.shadow.normalBias = 1.2;
+scene.add(sunLight, sunLight.target);
+scene.add(new THREE.HemisphereLight(0xbfd6e4, 0x2b3a33, 0.45));
+
+/* ================================================================
+   SECTION 4 — WATER MESH  (vertices driven by waveAt every frame)
+================================================================ */
+const WATER_W = 800, WATER_D = 520, SEG_X = 224, SEG_Z = 144;
+const waterGeo = new THREE.PlaneGeometry(WATER_W, WATER_D, SEG_X, SEG_Z);
+waterGeo.rotateX(-Math.PI / 2);
+waterGeo.translate(0, 0, -200); // x ∈ [-400,400], z ∈ [-460,60]
+const vCount = waterGeo.attributes.position.count;
+waterGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(vCount * 3), 3));
+waterGeo.attributes.position.setUsage(THREE.DynamicDrawUsage);
+waterGeo.attributes.normal.setUsage(THREE.DynamicDrawUsage);
+waterGeo.attributes.color.setUsage(THREE.DynamicDrawUsage);
+
+const waterMat = new THREE.MeshStandardMaterial({
+  vertexColors: true, roughness: 0.13, metalness: 0.02, envMapIntensity: 1.15
+});
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.receiveShadow = true;
+water.frustumCulled = false;
+scene.add(water);
+
+// distant flat "ocean skirt" out to the horizon
+const skirt = new THREE.Mesh(
+  new THREE.PlaneGeometry(5000, 5000),
+  new THREE.MeshStandardMaterial({ color: 0x0d2028, roughness: 0.18, metalness: 0.02, envMapIntensity: 1.1 })
+);
+skirt.rotation.x = -Math.PI / 2;
+skirt.position.y = -6.5; // below the deepest possible storm trough
+scene.add(skirt);
+
+let foamRef = 1;
+function updateWater() {
+  const pa = waterGeo.attributes.position.array;
+  const na = waterGeo.attributes.normal.array;
+  const ca = waterGeo.attributes.color.array;
+  foamRef = Math.max(swell.amp * 1.15, 0.35);
+  for (let i = 0; i < vCount; i++) {
+    const ix = i * 3;
+    const x = pa[ix], z = pa[ix + 2];
+    waveAt(x, z, simT, _w);
+    pa[ix + 1] = _w.h;
+    const inv = 1 / Math.hypot(_w.sx, 1, _w.sz);
+    na[ix] = -_w.sx * inv; na[ix + 1] = inv; na[ix + 2] = -_w.sz * inv;
+    // colour: sheltered water darker/greener, crests & steep faces foam
+    const shf = Math.min((1 - _w.att) * 1.5, 1);
+    let r = lerp(0.045, 0.055, shf), g = lerp(0.115, 0.150, shf), b = lerp(0.145, 0.135, shf);
+    let foam = (_w.h / foamRef - 0.55) * 1.6;
+    foam = Math.max(foam, (_w.sx * _w.sx + _w.sz * _w.sz) * 0.5 - 0.18);
+    foam = clamp(foam, 0, 1) * 0.8;
+    ca[ix]     = lerp(r, 0.70, foam);
+    ca[ix + 1] = lerp(g, 0.82, foam);
+    ca[ix + 2] = lerp(b, 0.85, foam);
+  }
+  waterGeo.attributes.position.needsUpdate = true;
+  waterGeo.attributes.normal.needsUpdate = true;
+  waterGeo.attributes.color.needsUpdate = true;
+}
+
+/* ================================================================
+   SECTION 5 — QUAY, PORT PROPS
+================================================================ */
+const concrete = new THREE.MeshStandardMaterial({ color: 0x8d9299, roughness: 0.9 });
+const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.6, metalness: 0.4 });
+
+function box(w, h, d, mat, x, y, z, cast = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = cast; m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+
+{ // quay slab (front face at z = 60, top at y = 2.2)
+  box(800, 6.4, 180, concrete, 0, -1.0, 150);
+  box(800, 6.4, 0.6, new THREE.MeshStandardMaterial({ color: 0x6d7278, roughness: 0.95 }), 0, -1.0, 59.8);
+  box(800, 1.6, 0.15, new THREE.MeshStandardMaterial({ color: 0x3d4a4d, roughness: 1 }), 0, -0.4, 59.45, false);
+  box(800, 0.35, 0.8, new THREE.MeshStandardMaterial({ color: 0x7a8087, roughness: 0.9 }), 0, 2.375, 60.6, false);
+  box(800, 0.04, 0.9, new THREE.MeshStandardMaterial({ color: 0xc7a83c, roughness: 0.8 }), 0, 2.22, 62.2, false);
+}
+// bollards + tire fenders
+const tireMat = new THREE.MeshStandardMaterial({ color: 0x17181a, roughness: 0.95 });
+for (let x = -360; x <= 360; x += 40) {
+  const b = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 0.9, 12), darkMetal);
+  post.position.y = 0.45;
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.5, 0.3, 12), darkMetal);
+  cap.position.y = 0.95;
+  b.add(post, cap);
+  b.position.set(x, 2.2, 61.6);
+  b.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+  scene.add(b);
+}
+for (let x = -377; x <= 390; x += 26) {
+  const f = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.32, 10, 20), tireMat);
+  f.position.set(x, 0.55, 59.35);
+  f.castShadow = true;
+  scene.add(f);
+}
+// lamp posts
+for (const x of [-300, -100, 100, 300]) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 8, 8), darkMetal);
+  pole.position.y = 4;
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.6), darkMetal);
+  arm.position.set(0, 7.9, -0.7);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.9),
+    new THREE.MeshStandardMaterial({ color: 0x333a40, emissive: 0xfff3c4, emissiveIntensity: 0.18 }));
+  head.position.set(0, 7.85, -1.4);
+  g.add(pole, arm, head);
+  g.position.set(x, 2.2, 64.5);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(g);
+}
+// harbour office
+{
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(34, 8, 14),
+    new THREE.MeshStandardMaterial({ color: 0xdde2e6, roughness: 0.85 }));
+  body.position.y = 4;
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(34.3, 2.2, 14.3),
+    new THREE.MeshStandardMaterial({ color: 0x1d2b33, roughness: 0.2, metalness: 0.6 }));
+  glass.position.y = 5.4;
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(36, 0.5, 16),
+    new THREE.MeshStandardMaterial({ color: 0x596066, roughness: 0.9 }));
+  roof.position.y = 8.2;
+  g.add(body, glass, roof);
+  g.position.set(-170, 2.2, 112);
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(g);
+}
+// container stacks
+{
+  const colors = [0xb5482f, 0x2f5f8f, 0x3f7a4e, 0xc96a26, 0x707880];
+  const spots = [[40, 96, 0, 2], [54, 96, 0, 1], [40, 101, 0, 1], [120, 104, 1, 2], [120, 112, 1, 1],
+                 [136, 104, 1, 3], [168, 118, 0, 2], [182, 118, 0, 1], [90, 122, 1, 1]];
+  spots.forEach(([x, z, r, lv], i) => {
+    for (let l = 0; l < lv; l++) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(12, 2.6, 2.6),
+        new THREE.MeshStandardMaterial({ color: colors[(i + l) % colors.length], roughness: 0.75, metalness: 0.15 }));
+      m.position.set(x, 2.2 + 1.3 + l * 2.62, z);
+      m.rotation.y = r ? Math.PI / 2 : 0;
+      m.castShadow = m.receiveShadow = true;
+      scene.add(m);
+    }
+  });
+}
+// portal crane silhouette
+{
+  const yel = new THREE.MeshStandardMaterial({ color: 0xc99425, roughness: 0.6, metalness: 0.3 });
+  const g = new THREE.Group();
+  [[-8, -5], [8, -5], [-8, 5], [8, 5]].forEach(([x, z]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(1.4, 12, 1.4), yel);
+    leg.position.set(x, 6, z); g.add(leg);
+  });
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(22, 2, 2.4), yel);
+  beam.position.y = 13;
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3), darkMetal);
+  cab.position.set(6, 11, 0);
+  g.add(beam, cab);
+  g.position.set(255, 2.2, 100);
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(g);
+}
+// distant port silhouettes + backland
+{
+  const land = new THREE.Mesh(new THREE.PlaneGeometry(2600, 1200),
+    new THREE.MeshStandardMaterial({ color: 0x4c5548, roughness: 1 }));
+  land.rotation.x = -Math.PI / 2;
+  land.position.set(0, 1.9, 840);
+  scene.add(land);
+  const shedMat = new THREE.MeshStandardMaterial({ color: 0x3a4149, roughness: 1 });
+  [[-260, 330, 120, 18], [-60, 360, 160, 24], [180, 340, 100, 15], [360, 380, 140, 20]].forEach(([x, z, w, h]) => {
+    box(w, h, 30, shedMat, x, 1.9 + h / 2, z, false);
+  });
+}
+
+/* ================================================================
+   SECTION 6 — BREAKWATER (draggable 3D model)
+================================================================ */
+const BW_LEN = 110, BW_BASE = 18, BW_TOP = 10, BW_H = 9;
+const bwGroup = new THREE.Group();
+const bwMats = [];
+{
+  const cs = new THREE.Shape(); // trapezoidal rubble-mound cross-section
+  cs.moveTo(-BW_BASE / 2, 0); cs.lineTo(BW_BASE / 2, 0);
+  cs.lineTo(BW_TOP / 2, BW_H); cs.lineTo(-BW_TOP / 2, BW_H); cs.closePath();
+  const geo = new THREE.ExtrudeGeometry(cs, { depth: BW_LEN, bevelEnabled: false });
+  geo.translate(0, 0, -BW_LEN / 2);
+  geo.rotateY(Math.PI / 2); // length along local +x
+  const rubble = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    color: 0x707578, roughness: 0.95, flatShading: true
+  }));
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(BW_LEN + 2, 1.1, BW_TOP + 1.5),
+    new THREE.MeshStandardMaterial({ color: 0x9aa1a6, roughness: 0.85 }));
+  cap.position.y = BW_H + 0.55;
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(BW_LEN + 2, 0.12, 0.7),
+    new THREE.MeshStandardMaterial({ color: 0xc7a83c, roughness: 0.7 }));
+  stripe.position.set(0, BW_H + 1.16, (BW_TOP + 1.5) / 2 - 0.5);
+  bwGroup.add(rubble, cap, stripe);
+  bwMats.push(rubble.material, cap.material);
+
+  // navigation beacon at the seaward end
+  const beacon = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 1, 12), darkMetal);
+  base.position.y = 0.5;
+  // red/white striped tower via canvas texture
+  const cnv = document.createElement('canvas'); cnv.width = 32; cnv.height = 128;
+  const cx = cnv.getContext('2d');
+  for (let i = 0; i < 6; i++) { cx.fillStyle = i % 2 ? '#e8ecef' : '#c23b2e'; cx.fillRect(0, i * 22, 32, 22); }
+  const stripes = new THREE.CanvasTexture(cnv);
+  stripes.colorSpace = THREE.SRGBColorSpace;
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 3.6, 12),
+    new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.7 }));
+  tower.position.y = 2.8;
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0x3a3f44, emissive: 0xff4d3d, emissiveIntensity: 0.4 });
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), lampMat);
+  lamp.position.y = 4.9;
+  beacon.add(base, tower, lamp);
+  // halo sprite
+  const hc = document.createElement('canvas'); hc.width = hc.height = 64;
+  const hx = hc.getContext('2d');
+  const grad = hx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(255,90,70,0.9)'); grad.addColorStop(1, 'rgba(255,90,70,0)');
+  hx.fillStyle = grad; hx.fillRect(0, 0, 64, 64);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(hc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.6
+  }));
+  halo.scale.setScalar(7);
+  halo.position.y = 4.9;
+  beacon.add(halo);
+  beacon.userData = { lampMat, halo };
+  beacon.position.set(BW_LEN / 2 - 4, BW_H + 1.1, 0);
+  bwGroup.add(beacon);
+  bwGroup.userData.beacon = beacon;
+
+  bwGroup.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  bwGroup.position.set(-45, -5.2, -35);
+  bwGroup.rotation.y = -12 * D2R;
+  scene.add(bwGroup);
+}
+const bwState = { x: -45, z: -35, rot: -12 * D2R, rotT: -12 * D2R };
+breakwaters.push({ x: bwState.x, z: bwState.z, rot: bwState.rot, hl: BW_LEN / 2 + 1, hw: BW_BASE / 2 + 1, group: bwGroup });
+
+// hover/drag footprint highlight (scene-level so it floats on the water)
+const footprint = new THREE.Group();
+{
+  const fill = new THREE.Mesh(new THREE.PlaneGeometry(BW_LEN + 8, BW_BASE + 8),
+    new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.07, depthWrite: false }));
+  fill.rotation.x = -Math.PI / 2;
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(BW_LEN + 8, BW_BASE + 8)),
+    new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.55 }));
+  edge.rotation.x = -Math.PI / 2;
+  footprint.add(fill, edge);
+  footprint.position.y = 0.5;
+  footprint.visible = false;
+  footprint.renderOrder = 5;
+  scene.add(footprint);
+}
+
+/* ================================================================
+   SECTION 7 — QUAY WAVE GAUGE (staff + riding float + 3D label)
+================================================================ */
+const GAUGE_X = 26, GAUGE_Z = 56;
+let gaugeFloat;
+{
+  const g = new THREE.Group();
+  // survey-staff texture: alternating 0.5 m bands + metre labels
+  const cnv = document.createElement('canvas'); cnv.width = 64; cnv.height = 512;
+  const cx = cnv.getContext('2d');
+  cx.fillStyle = '#e8ecef'; cx.fillRect(0, 0, 64, 512);
+  for (let i = 0; i < 24; i++) { if (i % 2 === 0) { cx.fillStyle = '#c23b2e'; cx.fillRect(0, i * 21.33, 64, 21.33); } }
+  cx.fillStyle = '#111'; cx.font = 'bold 15px monospace'; cx.textAlign = 'center';
+  for (let m = 0; m <= 12; m++) cx.fillText(String(m - 6), 32, 512 - m * 42.66 - 4);
+  const tex = new THREE.CanvasTexture(cnv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const pole = new THREE.Mesh(new THREE.BoxGeometry(0.4, 12, 0.4),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));
+  pole.position.y = 0.2; // spans y −5.8 … +6.2
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 0.25), darkMetal);
+  panel.position.set(0, 5.4, 0.4);
+  panel.rotation.x = -0.5;
+  gaugeFloat = new THREE.Group();
+  const f1 = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.45, 14),
+    new THREE.MeshStandardMaterial({ color: 0xc23b2e, roughness: 0.6 }));
+  const f2 = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.45, 14),
+    new THREE.MeshStandardMaterial({ color: 0xe8ecef, roughness: 0.6 }));
+  f1.position.y = -0.22; f2.position.y = 0.22;
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4, 6), darkMetal);
+  antenna.position.y = 1.1;
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x111, emissive: 0x22d3ee, emissiveIntensity: 1.5 }));
+  tip.position.y = 1.8;
+  gaugeFloat.add(f1, f2, antenna, tip);
+  g.add(pole, panel, gaugeFloat);
+  g.position.set(GAUGE_X, 0, GAUGE_Z);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(g);
+}
+const gaugeAnchor = new THREE.Vector3(GAUGE_X, 6.9, GAUGE_Z);
+
+/* ================================================================
+   SECTION 8 — NAV BUOYS (proof-of-life for the query API:
+   they already ride the same analytic surface the boats will use)
+================================================================ */
+const buoys = [];
+function makeBuoy(x, z, color, topmark, phase) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.2 });
+  const hull = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 0.8, 1.3, 14), mat);
+  hull.position.y = -0.15;
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 2.2, 8), darkMetal);
+  mast.position.y = 1.4;
+  let top;
+  if (topmark === 'cone') { top = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 10), mat); top.position.y = 2.9; }
+  else { top = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.9, 10), mat); top.position.y = 2.75; }
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0x222, emissive: color, emissiveIntensity: 0.3 });
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), lampMat);
+  lamp.position.y = 2.1;
+  g.add(hull, mast, top, lamp);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(x, 0, z);
+  scene.add(g);
+  buoys.push({ g, x, z, phase, lampMat, q: new THREE.Quaternion() });
+}
+makeBuoy(-90, -120, 0xc23b2e, 'cone', 0);      // port hand
+makeBuoy(80, -170, 0x2e7d4f, 'can', 2.4);      // starboard hand
+
+/* ================================================================
+   SECTION 9 — INTERACTION: orbit + breakwater dragging
+================================================================ */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const hitPoint = new THREE.Vector3();
+let dragging = false, hovering = false;
+const grabOffset = new THREE.Vector3();
+
+function castAt(clientX, clientY) {
+  ndc.set((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+}
+function overBreakwater(clientX, clientY) {
+  castAt(clientX, clientY);
+  return raycaster.intersectObject(bwGroup, true).length > 0;
+}
+// capture phase on window: runs BEFORE OrbitControls' own pointerdown
+window.addEventListener('pointerdown', e => {
+  cancelIntro();
+  if (e.target !== renderer.domElement) return;
+  if (overBreakwater(e.clientX, e.clientY)) {
+    dragging = true;
+    controls.enabled = false;
+    castAt(e.clientX, e.clientY);
+    if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
+      grabOffset.set(bwState.x - hitPoint.x, 0, bwState.z - hitPoint.z);
+    }
+    renderer.domElement.style.cursor = 'grabbing';
+    footprint.visible = true;
+  }
+}, true);
+window.addEventListener('pointermove', e => {
+  if (dragging) {
+    castAt(e.clientX, e.clientY);
+    if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
+      bwState.x = clamp(hitPoint.x + grabOffset.x, -340, 340);
+      bwState.z = clamp(hitPoint.z + grabOffset.z, -400, 52);
+    }
+    return;
+  }
+  if (e.target === renderer.domElement) {
+    hovering = overBreakwater(e.clientX, e.clientY);
+    renderer.domElement.style.cursor = hovering ? 'grab' : '';
+    footprint.visible = hovering;
+  } else if (hovering) {
+    hovering = false;
+    footprint.visible = false;
+    renderer.domElement.style.cursor = '';
+  }
+});
+function endDrag() {
+  if (!dragging) return;
+  dragging = false;
+  controls.enabled = true;
+  renderer.domElement.style.cursor = hovering ? 'grab' : '';
+  footprint.visible = hovering;
+}
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+
+/* ================================================================
+   SECTION 10 — UI WIRING
+================================================================ */
+function bindRange(id, fn) { el(id).addEventListener('input', e => fn(+e.target.value)); }
+bindRange('amp', v => { swell.ampT = v; el('ampVal').textContent = v.toFixed(2) + ' m'; clearPresets(); });
+bindRange('dir', v => {
+  swell.dirT = v * D2R;
+  el('dirVal').textContent = String(v).padStart(3, '0') + '°';
+  el('compassArrow').style.transform = `rotate(${v}deg)`;
+});
+bindRange('len', v => {
+  swell.lenT = v;
+  el('lenVal').textContent = v + ' m';
+  el('periodVal').textContent = (2 * Math.PI / Math.sqrt(9.81 * 2 * Math.PI / v)).toFixed(1) + ' s';
+  clearPresets();
+});
+function fmt(v) { return (v < 0 ? '−' + Math.abs(v) : String(v)) + '°'; }
+bindRange('angle', v => { bwState.rotT = v * D2R; el('angleVal').textContent = fmt(v); });
+el('angleVal').textContent = fmt(-12);
+
+el('resetBtn').addEventListener('click', () => {
+  bwState.x = -45; bwState.z = -35; bwState.rotT = -12 * D2R;
+  el('angle').value = -12; el('angleVal').textContent = fmt(-12);
+});
+const PRESETS = { calm: [0.5, 60], moderate: [1.4, 90], storm: [3.2, 130] };
+function clearPresets() { document.querySelectorAll('[data-preset]').forEach(b => b.classList.remove('active')); }
+document.querySelectorAll('[data-preset]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const [a, l] = PRESETS[btn.dataset.preset];
+    el('amp').value = a; el('amp').dispatchEvent(new Event('input'));
+    el('len').value = l; el('len').dispatchEvent(new Event('input'));
+    clearPresets(); btn.classList.add('active');
+  });
+});
+function togglePause() {
+  paused = !paused;
+  el('pauseBtn').innerHTML = paused ? '▶&nbsp;RESUME' : 'II&nbsp;PAUSE';
+}
+el('pauseBtn').addEventListener('click', togglePause);
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT') { e.preventDefault(); togglePause(); }
+});
+
+/* ================================================================
+   SECTION 11 — GAUGE READOUT, 3D LABEL, LIVE CHART
+================================================================ */
+const gaugeHist = [], offHist = [];
+const chart = el('chart'), ctx2d = chart.getContext('2d');
+function sizeChart() {
+  const dpr = Math.min(devicePixelRatio, 2);
+  chart.width = chart.clientWidth * dpr;
+  chart.height = chart.clientHeight * dpr;
+}
+sizeChart();
+
+function drawChart() {
+  const W = chart.width, H = chart.height;
+  ctx2d.clearRect(0, 0, W, H);
+  const t0 = simT - 20;
+  let mn = -0.5, mx = 0.5;
+  for (const s of gaugeHist) { if (s.h < mn) mn = s.h; if (s.h > mx) mx = s.h; }
+  for (const s of offHist) { if (s.h < mn) mn = s.h; if (s.h > mx) mx = s.h; }
+  const pad = (mx - mn) * 0.15 + 0.1; mn -= pad; mx += pad;
+  const X = t => ((t - t0) / 20) * W;
+  const Y = h => H - ((h - mn) / (mx - mn)) * H;
+  // grid
+  ctx2d.strokeStyle = 'rgba(148,163,184,0.12)'; ctx2d.lineWidth = 1;
+  for (let i = 1; i < 4; i++) { ctx2d.beginPath(); ctx2d.moveTo(0, H * i / 4); ctx2d.lineTo(W, H * i / 4); ctx2d.stroke(); }
+  if (mn < 0 && mx > 0) {
+    ctx2d.strokeStyle = 'rgba(148,163,184,0.25)';
+    ctx2d.beginPath(); ctx2d.moveTo(0, Y(0)); ctx2d.lineTo(W, Y(0)); ctx2d.stroke();
+  }
+  const plot = (hist, stroke, fill) => {
+    if (hist.length < 2) return;
+    const step = Math.max(1, Math.floor(hist.length / (W / 2)));
+    ctx2d.beginPath();
+    for (let i = 0; i < hist.length; i += step) {
+      const x = X(hist[i].t), y = Y(hist[i].h);
+      i === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+    }
+    if (fill) {
+      const last = hist[hist.length - 1];
+      const grd = ctx2d.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, 'rgba(34,211,238,0.22)'); grd.addColorStop(1, 'rgba(34,211,238,0)');
+      ctx2d.save();
+      ctx2d.lineTo(X(last.t), H); ctx2d.lineTo(X(hist[0].t), H); ctx2d.closePath();
+      ctx2d.fillStyle = grd; ctx2d.fill(); ctx2d.restore();
+      ctx2d.beginPath();
+      for (let i = 0; i < hist.length; i += step) {
+        const x = X(hist[i].t), y = Y(hist[i].h);
+        i === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+      }
+    }
+    ctx2d.strokeStyle = stroke; ctx2d.lineWidth = fill ? 2 : 1.2; ctx2d.stroke();
+  };
+  plot(offHist, 'rgba(226,232,240,0.4)', false);
+  plot(gaugeHist, '#22d3ee', true);
+  const last = gaugeHist[gaugeHist.length - 1];
+  if (last) {
+    ctx2d.fillStyle = '#22d3ee';
+    ctx2d.shadowColor = '#22d3ee'; ctx2d.shadowBlur = 8;
+    ctx2d.beginPath(); ctx2d.arc(X(last.t), Y(last.h), 3, 0, 7); ctx2d.fill();
+    ctx2d.shadowBlur = 0;
+  }
+}
+
+const gaugeLabel = el('gaugeLabel');
+const projV = new THREE.Vector3();
+let statTimer = 0;
+function updateGaugeAndUI(dt) {
+  const g = Harbor.sampleWater(GAUGE_X, GAUGE_Z);
+  const off = Harbor.sampleWater(GAUGE_X, -330);
+  // float rides the surface
+  gaugeFloat.position.y = g.height + 0.15;
+  gaugeFloat.rotation.x = clamp(g.normal.z, -1, 1) * 0.35;
+  gaugeFloat.rotation.z = clamp(-g.normal.x, -1, 1) * 0.35;
+  // history
+  const lastT = gaugeHist.length ? gaugeHist[gaugeHist.length - 1].t : -1;
+  if (simT > lastT) {
+    gaugeHist.push({ t: simT, h: g.height });
+    offHist.push({ t: simT, h: off.height });
+    while (gaugeHist.length && gaugeHist[0].t < simT - 22) { gaugeHist.shift(); offHist.shift(); }
+  }
+  // 3D-anchored label
+  projV.copy(gaugeAnchor).project(camera);
+  const onScreen = projV.z < 1 && Math.abs(projV.x) < 1.05 && Math.abs(projV.y) < 1.05;
+  gaugeLabel.style.opacity = onScreen ? 1 : 0;
+  if (onScreen) {
+    gaugeLabel.style.left = ((projV.x * 0.5 + 0.5) * innerWidth) + 'px';
+    gaugeLabel.style.top = ((-projV.y * 0.5 + 0.5) * innerHeight) + 'px';
+  }
+  // throttled text updates
+  statTimer -= dt;
+  if (statTimer <= 0) {
+    statTimer = 0.12;
+    const txt = g.height.toFixed(2);
+    el('gaugeNum').textContent = txt;
+    el('gaugeLabelVal').textContent = txt;
+    el('offNum').textContent = off.height.toFixed(2) + ' m';
+    el('shelterPct').textContent = Math.round((1 - g.attenuation) * 100) + '%';
+    let hmax = 0, sum = 0;
+    for (const s of gaugeHist) { if (s.h > hmax) hmax = s.h; sum += s.h; }
+    el('hmaxVal').textContent = hmax.toFixed(2) + ' m';
+    el('meanVal').textContent = (gaugeHist.length ? sum / gaugeHist.length : 0).toFixed(2) + ' m';
+  }
+  drawChart();
+}
+
+/* ================================================================
+   SECTION 12 — ★ PHASE-2 PUBLIC API ★
+   Moored boats will call Harbor.sampleWater() at their hull
+   sampling points each physics tick to compute buoyancy forces.
+   The surface is analytic in (x, z, t): no mesh raycasting needed,
+   deterministic, and identical to what is rendered.
+================================================================ */
+window.Harbor = {
+  version: '1.0.0-phase1',
+  time: () => simT,
+  /* Sample the moving water surface anywhere.
+     → { height, normal:Vector3, slopeX, slopeZ, attenuation } */
+  sampleWater(x, z, t = simT) {
+    waveAt(x, z, t, _w);
+    return {
+      height: _w.h,
+      normal: new THREE.Vector3(-_w.sx, 1, -_w.sz).normalize(),
+      slopeX: _w.sx,
+      slopeZ: _w.sz,
+      attenuation: _w.attEff // 1 = open sea … 0.15 = deep in breakwater lee
+    };
+  },
+  heightAt(x, z, t = simT) { waveAt(x, z, t, _w); return _w.h; },
+  getSwell: () => ({
+    amplitude: swell.amp,
+    directionDeg: ((swell.dir * R2D) % 360 + 360) % 360,
+    wavelength: swell.len,
+    period: 2 * Math.PI / Math.sqrt(9.81 * 2 * Math.PI / swell.len)
+  }),
+  breakwaters // live reference: [{x, z, rot, hl, hw, group}]
+};
+console.log('%c⬡ Harbor API ready%c  window.Harbor.sampleWater(x, z) → { height, normal, attenuation }',
+  'color:#22d3ee;font-weight:bold', 'color:#94a3b8');
+
+/* ================================================================
+   SECTION 13 — MAIN LOOP
+================================================================ */
+const clock = new THREE.Clock();
+let introT = 0, introActive = true;
+const introFrom = new THREE.Vector3(-320, 195, -390);
+const introTo = new THREE.Vector3(-150, 78, -185);
+function cancelIntro() { introActive = false; }
+window.addEventListener('wheel', cancelIntro, { passive: true });
+
+let firstFrame = true;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (!paused) simT += dt;
+
+  // smooth parameter transitions
+  const k = 1 - Math.exp(-2.4 * dt);
+  swell.amp += (swell.ampT - swell.amp) * k;
+  swell.len += (swell.lenT - swell.len) * k;
+  let dd = ((swell.dirT - swell.dir + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  swell.dir += dd * k;
+  bwState.rot += (bwState.rotT - bwState.rot) * k;
+  updateComponents();
+
+  // sync breakwater transform → shelter model
+  bwGroup.position.x = bwState.x;
+  bwGroup.position.z = bwState.z;
+  bwGroup.rotation.y = bwState.rot;
+  const bw = breakwaters[0];
+  bw.x = bwState.x; bw.z = bwState.z; bw.rot = bwState.rot;
+  footprint.position.x = bwState.x;
+  footprint.position.z = bwState.z;
+  footprint.rotation.y = bwState.rot;
+  // hover glow
+  const glow = (dragging || hovering) ? 0.35 : 0;
+  bwMats[0].emissive.setRGB(0.02 * glow * 3, 0.1 * glow, 0.12 * glow);
+  bwMats[1].emissive.copy(bwMats[0].emissive);
+
+  // beacon blink
+  const blink = Math.sin(simT * 2.6) > 0.72;
+  const bc = bwGroup.userData.beacon.userData;
+  bc.lampMat.emissiveIntensity = blink ? 3.2 : 0.35;
+  bc.halo.material.opacity = blink ? 0.85 : 0.12;
+  bc.halo.scale.setScalar(blink ? 8.5 : 5);
+
+  updateWater();
+
+  // buoys ride the analytic surface (phase-2 buoyancy preview)
+  for (const b of buoys) {
+    const s = Harbor.sampleWater(b.x, b.z);
+    b.g.position.y = s.height - 0.1;
+    _qTmp.setFromUnitVectors(_up, s.normal);
+    b.q.slerp(_qTmp, 1 - Math.exp(-3.5 * dt));
+    b.g.quaternion.copy(b.q);
+    b.lampMat.emissiveIntensity = Math.sin(simT * 2.2 + b.phase) > 0.65 ? 3 : 0.25;
+  }
+
+  updateGaugeAndUI(dt);
+
+  if (introActive) {
+    introT += dt / 2.2;
+    const e = 1 - Math.pow(1 - Math.min(introT, 1), 3);
+    camera.position.lerpVectors(introFrom, introTo, e);
+    if (introT >= 1) introActive = false;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+
+  if (firstFrame) {
+    firstFrame = false;
+    const loader = el('loader');
+    loader.style.transition = 'opacity .6s';
+    loader.style.opacity = 0;
+    setTimeout(() => loader.remove(), 650);
+  }
+}
+const _up = new THREE.Vector3(0, 1, 0);
+const _qTmp = new THREE.Quaternion();
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  sizeChart();
+});
+
+animate();
+</script>
+</body>
+</html>

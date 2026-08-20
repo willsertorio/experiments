@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tidal Race — Whirlpool Simulation</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1418; }
+  #app canvas { display: block; }
+  .font-display { font-family: 'Space Grotesk', sans-serif; }
+  .font-mono2 { font-family: 'JetBrains Mono', monospace; }
+  .vignette {
+    background: radial-gradient(ellipse at center, transparent 52%, rgba(3, 9, 13, 0.55) 100%);
+  }
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.05; mix-blend-mode: overlay;
+  }
+  .pulse-dot { animation: pulseDot 2.2s ease-in-out infinite; }
+  @keyframes pulseDot { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  input[type=range] { -webkit-appearance: none; appearance: none; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, #164e63, #67e8f9, #164e63); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: #a5f3fc; border: 2px solid #0e7490; cursor: pointer; box-shadow: 0 0 10px rgba(103,232,249,0.6); }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #a5f3fc;
+    border: 2px solid #0e7490; cursor: pointer; }
+  .view-btn { transition: all 0.25s ease; }
+  .view-btn:hover { background: rgba(165, 243, 252, 0.14); border-color: rgba(165, 243, 252, 0.5); }
+  .view-btn.active { background: rgba(165, 243, 252, 0.18); border-color: rgba(165, 243, 252, 0.7); color: #cffafe; }
+  #fadeout { transition: opacity 1.4s ease; }
+</style>
+</head>
+<body class="select-none">
+
+<div id="app" class="fixed inset-0"></div>
+
+<!-- cinematic overlays -->
+<div class="vignette fixed inset-0 pointer-events-none z-10"></div>
+<div class="grain fixed inset-0 pointer-events-none z-10"></div>
+
+<!-- loading fade -->
+<div id="fadeout" class="fixed inset-0 z-40 bg-[#0b1418] flex items-center justify-center pointer-events-none">
+  <div class="font-mono2 text-cyan-200/70 text-xs tracking-[0.4em]">FLOODING CHANNEL…</div>
+</div>
+
+<!-- title panel -->
+<div class="fixed top-4 left-4 z-20 max-w-[300px]">
+  <div class="bg-slate-950/55 backdrop-blur-md border border-white/10 rounded-xl px-4 py-3 shadow-2xl">
+    <div class="font-display font-bold text-cyan-50 text-xl tracking-wide leading-none">TIDAL RACE</div>
+    <div class="font-mono2 text-[10px] text-cyan-200/60 tracking-[0.18em] mt-1.5">TWIN HEADLANDS CHANNEL · FLOOD TIDE</div>
+    <div class="flex items-center gap-2 mt-2.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-red-400 pulse-dot"></span>
+      <span class="font-mono2 text-[10px] text-red-300/80 tracking-[0.2em]">LIVE · SEAMLESS 24s LOOP</span>
+    </div>
+    <div class="grid grid-cols-2 gap-2 mt-3">
+      <div class="bg-white/5 rounded-lg px-2.5 py-1.5 border border-white/5">
+        <div class="font-mono2 text-[9px] text-cyan-200/50 tracking-[0.15em]">STREAM</div>
+        <div class="font-mono2 text-sm text-cyan-100" id="readout-flow">5.8 kn</div>
+      </div>
+      <div class="bg-white/5 rounded-lg px-2.5 py-1.5 border border-white/5">
+        <div class="font-mono2 text-[9px] text-cyan-200/50 tracking-[0.15em]">STATE</div>
+        <div class="font-mono2 text-sm text-cyan-100" id="readout-state">FLOOD</div>
+      </div>
+    </div>
+    <div class="mt-3 space-y-1 font-mono2 text-[10px] text-slate-300/70 tracking-wider">
+      <div class="flex items-center gap-2"><span class="text-cyan-300">◈</span> 4 standing eddies · lee of the tips</div>
+      <div class="flex items-center gap-2"><span class="text-amber-300">◎</span> persistent whirlpool · spiral foam</div>
+      <div class="flex items-center gap-2"><span class="text-emerald-300/90">≈</span> kelp streaming below waterline</div>
+    </div>
+  </div>
+</div>
+
+<!-- view presets -->
+<div class="fixed top-4 right-4 z-20 flex gap-2">
+  <button data-view="overview" class="view-btn active font-mono2 text-[10px] tracking-[0.2em] text-cyan-100/80 bg-slate-950/55 backdrop-blur-md border border-white/15 rounded-lg px-3 py-2">OVERVIEW</button>
+  <button data-view="whirlpool" class="view-btn font-mono2 text-[10px] tracking-[0.2em] text-cyan-100/80 bg-slate-950/55 backdrop-blur-md border border-white/15 rounded-lg px-3 py-2">WHIRLPOOL</button>
+  <button data-view="drift" class="view-btn font-mono2 text-[10px] tracking-[0.2em] text-cyan-100/80 bg-slate-950/55 backdrop-blur-md border border-white/15 rounded-lg px-3 py-2">DRIFT LINE</button>
+</div>
+
+<!-- tide control -->
+<div class="fixed bottom-4 left-4 z-20">
+  <div class="bg-slate-950/55 backdrop-blur-md border border-white/10 rounded-xl px-4 py-3 shadow-2xl w-[240px]">
+    <div class="flex justify-between items-baseline">
+      <span class="font-mono2 text-[10px] text-cyan-200/60 tracking-[0.2em]">TIDE CYCLE</span>
+      <span class="font-mono2 text-[10px] text-cyan-100/90" id="readout-tide">100%</span>
+    </div>
+    <input id="tide" type="range" min="25" max="165" value="100" class="w-full mt-2.5">
+    <div class="flex justify-between mt-1.5 font-mono2 text-[9px] text-slate-400/60 tracking-[0.15em]">
+      <span>EBB</span><span>NEAP</span><span>SPRING</span>
+    </div>
+  </div>
+</div>
+
+<!-- hint -->
+<div class="fixed bottom-4 right-4 z-20">
+  <div class="font-mono2 text-[10px] text-slate-300/60 tracking-[0.18em] bg-slate-950/45 backdrop-blur-md border border-white/10 rounded-lg px-3 py-2">
+    DRAG · ORBIT &nbsp;&nbsp; WHEEL · ZOOM &nbsp;&nbsp; R-DRAG · PAN
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   CONFIG — one steady flow field shared by GLSL + JS.
+   Master loop: T = 24 s. Every time-frequency used in shaders
+   is an integer multiple of Ω = 2π/24, and every texture scroll
+   advances an integer number of tiles per loop → perfect wrap.
+   ============================================================ */
+const LOOP_T   = 24.0;
+const OMG      = Math.PI * 2 / LOOP_T;
+const BASE     = { speed: 5.5 };
+const EDDIES   = [
+  { x: -2.0, z:  8.0, s:  2.6, R: 4.5 },
+  { x:  3.5, z: -8.0, s: -2.9, R: 5.0 },
+  { x:  1.5, z:  4.0, s:  2.2, R: 3.4 },
+  { x: 16.0, z: -0.5, s: -1.8, R: 3.2 }
+];
+const WHIRL = { x: 12.0, z: -5.5, s: 9.0, R: 5.2, dip: 2.6, dipR: 3.6, inflow: 2.3 };
+const WAVES = [
+  { a: 0.16, kx: 0.42, kz: 0.10, w: 3, p: 0.0 },
+  { a: 0.11, kx: 0.78, kz: -0.26, w: 5, p: 1.7 },
+  { a: 0.07, kx: 1.30, kz: 0.60, w: 8, p: 4.2 },
+  { a: 0.05, kx: -0.35, kz: 1.05, w: 2, p: 2.1 }
+];
+const FOG = { color: 0xaebec2, near: 70, far: 260 };
+const SUN_DIR = new THREE.Vector3(-0.5, 0.62, 0.3).normalize();
+const WATER_BOUNDS = { x0: -210, z0: -110, w: 420, h: 220 };
+
+let tide = 1.0;                 // 0.25 – 1.65 via slider
+let streakTiles = 6;            // integer tiles per loop (re-quantized on slider input)
+let whirlK = 5;                 // integer spiral revs per loop
+
+/* ---------------- helpers ---------------- */
+const fn = x => { const s = String(x); return (s.includes('.') || s.includes('e')) ? s : s + '.0'; };
+const clamp01 = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(1337);
+
+function hash2(ix, iz) { const s = Math.sin(ix * 127.1 + iz * 311.7) * 43758.5453; return s - Math.floor(s); }
+function vnoise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z);
+  const fx = x - ix, fz = z - iz;
+  const ux = fx * fx * (3 - 2 * fx), uz = fz * fz * (3 - 2 * fz);
+  const a = hash2(ix, iz), b = hash2(ix + 1, iz), c = hash2(ix, iz + 1), d = hash2(ix + 1, iz + 1);
+  return ((a + (b - a) * ux) * (1 - uz) + (c + (d - c) * ux) * uz) * 2 - 1;
+}
+function n2(x, z) {
+  return vnoise(x, z) * 0.6 + vnoise(x * 2.13 + 7.7, z * 2.13 + 3.1) * 0.28 + vnoise(x * 4.31 + 13.7, z * 4.31 + 9.2) * 0.16;
+}
+
+/* ---------------- terrain heightfield ---------------- */
+function headland(x, z, side) {
+  const tipX = -10;
+  const env = clamp01((tipX + 4 - x) / 26);
+  if (env <= 0) return 0;
+  const crestZ = side * (11 + 9 * clamp01((tipX - x) / 30));
+  const w = 4.5 + 4.0 * clamp01((tipX - x) / 34);
+  const dz = (z - crestZ) / w;
+  return env * Math.exp(-dz * dz) * (15 + 3.0 * n2(x * 0.09 + side * 7, z * 0.09));
+}
+function terrainHeight(x, z) {
+  let h = -8.5 + n2(x * 0.05, z * 0.05) * 2.0 + n2(x * 0.17 + 31, z * 0.17) * 0.6;
+  h += headland(x, z, 1) + headland(x, z, -1);
+  // submerged reef downstream of the tips → squeezes the race
+  h += 5.0 * Math.exp(-(((x - 4) / 12) ** 2)) * Math.exp(-(((Math.abs(z) - 8) / 4.5) ** 2));
+  // rocky islet mid-channel
+  const di = (x + 6) ** 2 / (3.2 * 3.2) + (z - 3.5) ** 2 / (3.6 * 3.6);
+  h += 13 * Math.exp(-di) * (0.85 + 0.3 * n2(x * 0.3, z * 0.3));
+  // distant hills enclosing the sound
+  h += 15 * Math.exp(-(((Math.abs(z) - 66) / 18) ** 2)) * (0.6 + 0.4 * n2(x * 0.03 + 9, z * 0.03));
+  // skerries on the eastern horizon
+  h += 11 * Math.exp(-((x - 62) ** 2 + (z - 28) ** 2) / 140);
+  h += 12 * Math.exp(-((x - 88) ** 2 + (z + 34) ** 2) / 180);
+  return h;
+}
+
+/* ---------------- flow field (JS mirror of GLSL) ---------------- */
+const _f = { x: 0, y: 0 };
+function flowAtJS(x, z, out) {
+  const chan = 1 - 0.5 * clamp01((Math.abs(z) - 6) / 18);
+  const accel = 1 + 0.5 * Math.exp(-(((x + 4) / 14) ** 2));
+  let vx = BASE.speed * tide * chan * accel, vz = 0;
+  for (const e of EDDIES) {
+    const dx = x - e.x, dz = z - e.z;
+    const q2 = (dx * dx + dz * dz) / (e.R * e.R);
+    const m = e.s * tide * Math.exp(0.5 * (1 - q2)) / e.R;
+    vx += m * -dz; vz += m * dx;
+  }
+  {
+    const dx = x - WHIRL.x, dz = z - WHIRL.z;
+    const q2 = (dx * dx + dz * dz) / (WHIRL.R * WHIRL.R);
+    const m = Math.exp(0.5 * (1 - q2)) * tide / WHIRL.R;
+    vx += WHIRL.s * m * -dz - WHIRL.inflow * m * dx;
+    vz += WHIRL.s * m * dx - WHIRL.inflow * m * dz;
+  }
+  out.x = vx; out.y = vz;
+  return out;
+}
+function heightAtJS(x, z, t) {
+  let h = 0;
+  for (const w of WAVES) h += w.a * Math.sin(x * w.kx + z * w.kz - t * OMG * w.w + w.p);
+  const dx = x - WHIRL.x, dz = z - WHIRL.z, r2 = dx * dx + dz * dz;
+  const dr = WHIRL.dipR;
+  h -= WHIRL.dip * (0.55 + 0.45 * tide) * (Math.exp(-r2 / (dr * dr)) + 0.5 * Math.exp(-r2 / (dr * dr * 0.16)));
+  h += WHIRL.dip * 0.05 * Math.exp(-((Math.sqrt(r2) - dr * 1.8) ** 2) / 2.5);
+  for (const e of EDDIES) {
+    const ex = x - e.x, ez = z - e.z;
+    h -= 0.09 * Math.sign(e.s) * Math.min(Math.abs(e.s) / 3, 1) * tide * Math.exp(-(ex * ex + ez * ez) / (e.R * e.R));
+  }
+  return h;
+}
+
+/* ============================================================
+   RENDERER / SCENE
+   ============================================================ */
+const container = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+renderer.setClearColor(FOG.color);
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(FOG.color, FOG.near, FOG.far);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 1200);
+camera.position.set(-46, 30, 42);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(6, 0, -2);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 10;
+controls.maxDistance = 140;
+controls.maxPolarAngle = 1.52;
+controls.update();
+
+const fogCol = new THREE.Color(FOG.color);
+const sunCol = new THREE.Color(1.15, 0.92, 0.68);
+
+const sun = new THREE.DirectionalLight(0xffe0b3, 2.6);
+sun.position.copy(SUN_DIR).multiplyScalar(120);
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xbcd0d8, 0x3a4438, 0.9));
+
+/* ============================================================
+   TEXTURES (all tileable → clean wrap)
+   ============================================================ */
+function makeStreakTexture() {
+  const S = 256, cells1 = 8, cells2 = 32;
+  const mk = (c, seed) => {
+    const r = mulberry32(seed), g = new Float32Array(c * c);
+    for (let i = 0; i < c * c; i++) g[i] = r();
+    return g;
+  };
+  const latt = [
+    [mk(cells1, 11), mk(cells1, 22), mk(cells1, 33)],
+    [mk(cells2, 44), mk(cells2, 55), mk(cells2, 66)]
+  ];
+  const sample = (g, c, u, v) => {
+    const x = ((u % 1) + 1) % 1 * c, y = ((v % 1) + 1) % 1 * c;
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = x - ix, fy = y - iy;
+    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    const x0 = ix % c, x1 = (ix + 1) % c, y0 = iy % c, y1 = (iy + 1) % c;
+    const a = g[y0 * c + x0], b = g[y0 * c + x1], cc = g[y1 * c + x0], d = g[y1 * c + x1];
+    return (a + (b - a) * ux) * (1 - uy) + (cc + (d - cc) * ux) * uy;
+  };
+  const data = new Uint8Array(S * S * 4);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = x / S, v = y / S, i = (y * S + x) * 4;
+    for (let ch = 0; ch < 3; ch++) {
+      const val = sample(latt[0][ch], cells1, u, v) * 0.62 + sample(latt[1][ch], cells2, u, v) * 0.38;
+      data[i + ch] = val * 255;
+    }
+    data[i + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, S, S);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+function makeSpriteTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+function makeShoreMask() {
+  const W = 512, H = 256;
+  const data = new Uint8Array(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const wx = WATER_BOUNDS.x0 + (x / (W - 1)) * WATER_BOUNDS.w;
+    const wz = WATER_BOUNDS.z0 + (y / (H - 1)) * WATER_BOUNDS.h;
+    const h = terrainHeight(wx, wz);
+    const shore = clamp01((h + 2.4) / 2.2) * (1 - clamp01((h - 0.1) / 1.3));
+    const shallow = clamp01((h + 5.5) / 5.0);
+    const i = (y * W + x) * 4;
+    data[i] = shore * 255;
+    data[i + 1] = shallow * 255;
+    data[i + 2] = 0; data[i + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, W, H);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+const streakTex = makeStreakTexture();
+const spriteTex = makeSpriteTexture();
+const shoreMask = makeShoreMask();
+
+/* ============================================================
+   GLSL — shared flow/height chunk (unrolled from config)
+   ============================================================ */
+const COMMON_GLSL = `
+uniform float uTime;
+uniform float uTide;
+const float OMG = ${fn(OMG)};
+const vec2 WPOS = vec2(${fn(WHIRL.x)}, ${fn(WHIRL.z)});
+const float WR  = ${fn(WHIRL.R)};
+const float WDR = ${fn(WHIRL.dipR)};
+uniform float uWhirlDip;
+float eddyExp(float q2){ return exp(0.5 * (1.0 - q2)); }
+vec2 flowAt(vec2 p){
+  float chan  = 1.0 - 0.5 * smoothstep(6.0, 24.0, abs(p.y));
+  float ax = (p.x + 4.0) / 14.0;
+  float accel = 1.0 + 0.5 * exp(-ax * ax);
+  vec2 v = vec2(${fn(BASE.speed)} * uTide * chan * accel, 0.0);
+  ${EDDIES.map(e => `
+  { vec2 d = p - vec2(${fn(e.x)}, ${fn(e.z)});
+    float q2 = dot(d, d) / ${fn(e.R * e.R)};
+    v += ${fn(e.s / e.R)} * uTide * eddyExp(q2) * vec2(-d.y, d.x); }`).join('\n')}
+  { vec2 d = p - WPOS;
+    float q2 = dot(d, d) / (WR * WR);
+    float m = eddyExp(q2) * uTide / WR;
+    v += ${fn(WHIRL.s)} * m * vec2(-d.y, d.x);
+    v -= ${fn(WHIRL.inflow)} * m * d; }
+  return v;
+}
+float heightAt(vec2 p, float t){
+  float h = 0.0;
+  ${WAVES.map(w => `h += ${fn(w.a)} * sin(dot(p, vec2(${fn(w.kx)}, ${fn(w.kz)})) - t * OMG * ${fn(w.w)} + ${fn(w.p)});`).join('\n  ')}
+  vec2 d = p - WPOS; float r2 = dot(d, d);
+  h -= uWhirlDip * (exp(-r2 / (WDR * WDR)) + 0.5 * exp(-r2 / (WDR * WDR * 0.16)));
+  float rr = sqrt(r2) - WDR * 1.8;
+  h += ${fn(WHIRL.dip * 0.05)} * exp(-rr * rr / 2.5);
+  ${EDDIES.map(e => `h -= ${fn(0.09 * Math.sign(e.s) * Math.min(Math.abs(e.s) / 3, 1))} * uTide * exp(-dot(p - vec2(${fn(e.x)}, ${fn(e.z)}), p - vec2(${fn(e.x)}, ${fn(e.z)})) / ${fn(e.R * e.R)});`).join('\n  ')}
+  return h;
+}
+`;
+
+/* ============================================================
+   WATER
+   ============================================================ */
+const waterUniforms = {
+  uTime: { value: 0 },
+  uTide: { value: tide },
+  uWhirlDip: { value: WHIRL.dip },
+  uStreakTex: { value: streakTex },
+  uShoreMask: { value: shoreMask },
+  uStreakScroll: { value: streakTiles / LOOP_T },
+  uWhirlSpin: { value: whirlK * OMG },
+  uSunDir: { value: SUN_DIR },
+  uSunCol: { value: sunCol },
+  uFogColor: { value: fogCol },
+  uFogNear: { value: FOG.near },
+  uFogFar: { value: FOG.far }
+};
+const waterMat = new THREE.ShaderMaterial({
+  uniforms: waterUniforms,
+  transparent: true,
+  depthWrite: false,
+  vertexShader: `
+${COMMON_GLSL}
+varying vec3 vWorld;
+varying vec3 vNormal;
+void main(){
+  vec2 p = position.xz;
+  float t = uTime;
+  float h = heightAt(p, t);
+  float e = 0.7;
+  float hx = heightAt(p + vec2(e, 0.0), t) - heightAt(p - vec2(e, 0.0), t);
+  float hz = heightAt(p + vec2(0.0, e), t) - heightAt(p - vec2(0.0, e), t);
+  vNormal = normalize(vec3(-hx, 2.0 * e, -hz));
+  vWorld = vec3(p.x, h, p.y);
+  gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);
+}`,
+  fragmentShader: `
+${COMMON_GLSL}
+uniform sampler2D uStreakTex;
+uniform sampler2D uShoreMask;
+uniform float uStreakScroll;
+uniform float uWhirlSpin;
+uniform vec3 uSunDir;
+uniform vec3 uSunCol;
+uniform vec3 uFogColor;
+uniform float uFogNear;
+uniform float uFogFar;
+varying vec3 vWorld;
+varying vec3 vNormal;
+void main(){
+  float t = uTime;
+  vec3 V = normalize(cameraPosition - vWorld);
+  vec3 N = normalize(vNormal);
+  float dist = length(cameraPosition - vWorld);
+
+  // base colour — deep race vs sunlit shallows
+  vec2 muv = (vWorld.xz - vec2(${fn(WATER_BOUNDS.x0)}, ${fn(WATER_BOUNDS.z0)})) / vec2(${fn(WATER_BOUNDS.w)}, ${fn(WATER_BOUNDS.h)});
+  vec4 mask = texture2D(uShoreMask, muv);
+  vec3 col = mix(vec3(0.012, 0.087, 0.128), vec3(0.043, 0.20, 0.22), mask.g);
+
+  // fresnel to sky
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+  fres = mix(0.04, 1.0, fres);
+  col = mix(col, uFogColor * 1.05, fres * 0.72);
+
+  // sun glitter
+  vec3 L = normalize(uSunDir);
+  vec3 H = normalize(L + V);
+  float ndh = max(dot(N, H), 0.0);
+  col += uSunCol * (pow(ndh, 260.0) * 1.5 + pow(ndh, 40.0) * 0.22);
+
+  /* ---- FOAM ---- */
+  // channel streaks: scroll exactly uStreakTiles per loop (integer → seamless)
+  vec2 suv = vec2(vWorld.x * 0.045 - t * uStreakScroll, vWorld.z * 0.16);
+  float s1 = texture2D(uStreakTex, suv).r;
+  float s2 = texture2D(uStreakTex, suv + vec2(0.5, 0.33)).g;
+  float streak = smoothstep(0.55, 0.85, s1 * 0.62 + s2 * 0.48);
+  streak *= 0.45 + 0.55 * smoothstep(30.0, 6.0, abs(vWorld.z));
+  streak *= 0.55 + 0.45 * uTide;
+
+  // standing eddies: foam sampled in rotating polar frame (integer turns/loop)
+  float efoam = 0.0;
+  ${EDDIES.map(e => `
+  { vec2 d = vWorld.xz - vec2(${fn(e.x)}, ${fn(e.z)});
+    float r = length(d);
+    float ang = atan(d.y, d.x) * 0.15915494;
+    float turn = (ang + ${fn(Math.sign(e.s))} * t * ${fn(2 / LOOP_T)}) * 2.0;
+    float er = texture2D(uStreakTex, vec2(r * 0.09, turn)).g;
+    efoam += smoothstep(0.52, 0.82, er) * exp(-r * r / ${fn(e.R * e.R * 1.25)}) * ${fn(Math.min(Math.abs(e.s) / 3, 1) * 0.85)}; }`).join('\n')}
+
+  // whirlpool: foam lines spiralling into the centre
+  vec2 wd = vWorld.xz - WPOS;
+  float wr = max(length(wd), 0.001);
+  float wang = atan(wd.y, wd.x);
+  float spiral = sin(wang * 3.0 + log(wr) * 2.6 + t * uWhirlSpin);
+  float sband = smoothstep(0.30, 0.72, spiral);
+  float nrot = -t * OMG * 2.0; // noise frame: exactly 2 turns/loop
+  vec2 rp = mat2(cos(nrot), -sin(nrot), sin(nrot), cos(nrot)) * wd;
+  float nz = texture2D(uStreakTex, rp * 0.09 + 0.5).b;
+  float wfoam = sband * smoothstep(0.30, 0.62, nz + 0.22) * exp(-wr * wr / (WR * WR * 2.4));
+  wfoam += smoothstep(0.55, 0.9, texture2D(uStreakTex, rp * 0.21).g) * exp(-wr * wr / (WR * WR * 0.65)) * 0.8;
+  // rim ring: bands streaming inward (2 tiles/loop)
+  float rim = texture2D(uStreakTex, vec2(wr * 0.12 + t * ${fn(2 / LOOP_T)}, wang * 0.477465)).r;
+  float rw = wr - WR * 1.35;
+  wfoam += smoothstep(0.55, 0.85, rim) * exp(-rw * rw / (WR * WR * 0.6)) * 0.85;
+
+  // shoreline foam pulsing with the race
+  float shore = mask.r * (0.55 + 0.45 * sin(t * OMG * 3.0 + vWorld.x * 0.35 + vWorld.z * 0.6));
+  shore *= smoothstep(0.3, 0.72, texture2D(uStreakTex, vWorld.xz * 0.05 + vec2(t * ${fn(1 / LOOP_T)}, 0.0)).b) * 1.7;
+
+  float foam = clamp(streak * 0.85 + efoam + wfoam * 1.25 + shore, 0.0, 1.0);
+
+  // darken the funnel throat
+  float dipF = exp(-wr * wr / (WDR * WDR * 0.9));
+  col *= 1.0 - 0.42 * dipF;
+  col = mix(col, vec3(0.02, 0.09, 0.10), dipF * 0.5);
+
+  col = mix(col, vec3(0.90, 0.94, 0.95), foam * 0.92);
+
+  float alpha = mix(0.62, 0.9, 1.0 - mask.g * 0.85);
+  alpha = mix(alpha, 0.99, foam);
+  alpha = max(alpha, fres * 0.92);
+
+  float fogF = smoothstep(uFogNear, uFogFar, dist);
+  col = mix(col, uFogColor, fogF);
+
+  gl_FragColor = vec4(col, alpha);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`
+});
+const waterGeo = new THREE.PlaneGeometry(WATER_BOUNDS.w, WATER_BOUNDS.h, 440, 230);
+waterGeo.rotateX(-Math.PI / 2);
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.renderOrder = 10;
+water.frustumCulled = false;
+scene.add(water);
+
+/* ============================================================
+   TERRAIN — headlands, islet, reef, seabed (flat-shaded facets)
+   ============================================================ */
+{
+  const W = 480, H = 280, SX = 210, SZ = 122;
+  let geo = new THREE.PlaneGeometry(W, H, SX, SZ);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setY(i, terrainHeight(pos.getX(i), pos.getZ(i)));
+  }
+  geo = geo.toNonIndexed();
+  geo.computeVertexNormals();
+  const p2 = geo.attributes.position;
+  const colors = new Float32Array(p2.count * 3);
+  const cRock = new THREE.Color(0x4c4a48), cWet = new THREE.Color(0x2c2b29),
+        cSand = new THREE.Color(0x6d6b57), cDeep = new THREE.Color(0x37433e),
+        cMoss = new THREE.Color(0x59683c), cGrass = new THREE.Color(0x6b7a45);
+  const tmp = new THREE.Color();
+  for (let f = 0; f < p2.count; f += 3) {
+    const cx = (p2.getX(f) + p2.getX(f + 1) + p2.getX(f + 2)) / 3;
+    const cy = (p2.getY(f) + p2.getY(f + 1) + p2.getY(f + 2)) / 3;
+    const cz = (p2.getZ(f) + p2.getZ(f + 1) + p2.getZ(f + 2)) / 3;
+    const nzv = n2(cx * 0.35 + 3, cz * 0.35);
+    if (cy < -4) tmp.copy(cDeep).lerp(cSand, clamp01((cy + 8) / 4) * 0.5);
+    else if (cy < 0.1) tmp.copy(cSand).lerp(cWet, clamp01((cy + 1.6) / 1.8));
+    else if (cy < 0.7) tmp.copy(cWet);
+    else if (cy < 3.2) tmp.copy(cRock).offsetHSL(0, 0, nzv * 0.04);
+    else tmp.copy(cMoss).lerp(cGrass, clamp01(nzv * 0.5 + 0.5)).lerp(cRock, clamp01(1 - (cy - 3) / 3) * 0.5);
+    const jitter = 0.92 + hash2(f, 7) * 0.16;
+    for (let k = 0; k < 3; k++) {
+      colors[(f + k) * 3] = tmp.r * jitter;
+      colors[(f + k) * 3 + 1] = tmp.g * jitter;
+      colors[(f + k) * 3 + 2] = tmp.b * jitter;
+    }
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0 });
+  scene.add(new THREE.Mesh(geo, mat));
+}
+
+/* scattered boulders along the waterline */
+{
+  const rockGeo = new THREE.IcosahedronGeometry(1, 1);
+  const rp = rockGeo.attributes.position;
+  for (let i = 0; i < rp.count; i++) {
+    const j = 0.75 + hash2(i, 99) * 0.5;
+    rp.setXYZ(i, rp.getX(i) * j, rp.getY(i) * (0.55 + hash2(i, 5) * 0.5), rp.getZ(i) * j);
+  }
+  rockGeo.computeVertexNormals();
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x3d3b39, flatShading: true, roughness: 1 });
+  let placed = 0, tries = 0;
+  while (placed < 26 && tries++ < 400) {
+    const x = -50 + rng() * 90, z = -30 + rng() * 60;
+    const h = terrainHeight(x, z);
+    if (h > -1.2 && h < 1.6) {
+      const m = new THREE.Mesh(rockGeo, rockMat);
+      m.position.set(x, h - 0.15, z);
+      m.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+      const s = 0.5 + rng() * 1.6;
+      m.scale.setScalar(s);
+      scene.add(m);
+      placed++;
+    }
+  }
+}
+
+/* ============================================================
+   SKY DOME
+   ============================================================ */
+{
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms: { uFogColor: { value: fogCol }, uSunDir: { value: SUN_DIR }, uSunCol: { value: sunCol }, uStreakTex: { value: streakTex } },
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+uniform vec3 uFogColor; uniform vec3 uSunDir; uniform vec3 uSunCol; uniform sampler2D uStreakTex;
+varying vec3 vDir;
+void main(){
+  vec3 d = normalize(vDir);
+  float h = clamp(d.y, 0.0, 1.0);
+  vec3 col = mix(uFogColor, vec3(0.22, 0.32, 0.42), smoothstep(0.0, 0.45, h));
+  col = mix(col, vec3(0.10, 0.16, 0.24), smoothstep(0.4, 1.0, h));
+  float sd = max(dot(d, normalize(uSunDir)), 0.0);
+  col += uSunCol * (pow(sd, 350.0) * 2.2 + pow(sd, 8.0) * 0.12);
+  float cn = texture2D(uStreakTex, d.xz / (0.3 + d.y) * 0.06).r;
+  col *= 0.95 + 0.09 * cn * smoothstep(0.03, 0.3, d.y);
+  gl_FragColor = vec4(col, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), skyMat);
+  sky.renderOrder = -10;
+  sky.frustumCulled = false;
+  scene.add(sky);
+}
+
+/* ============================================================
+   KELP — instanced blades bending with the current
+   ============================================================ */
+const kelpUniforms = {
+  uTime: { value: 0 },
+  uTide: { value: tide },
+  uWhirlDip: { value: WHIRL.dip },
+  uFogColor: { value: fogCol },
+  uFogNear: { value: FOG.near },
+  uFogFar: { value: FOG.far }
+};
+{
+  const base = new THREE.PlaneGeometry(1, 1, 1, 8);
+  base.translate(0, 0.5, 0);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.index = base.index;
+  geo.setAttribute('position', base.attributes.position);
+  geo.setAttribute('uv', base.attributes.uv);
+
+  const positions = [], params = [];
+  let tries = 0;
+  while (positions.length / 3 < 760 && tries++ < 30000) {
+    const x = -75 + rng() * 150, z = -23 + rng() * 46;
+    const h = terrainHeight(x, z);
+    const depth = -h;
+    if (depth < 1.6 || depth > 7.6) continue;
+    if (n2(x * 0.07 + 5, z * 0.07) < -0.05 && rng() < 0.72) continue; // clumping
+    const maxH = Math.min(depth - 0.4, 5.6);
+    if (maxH < 1.2) continue;
+    positions.push(x, h + 0.05, z);
+    params.push(1.4 + rng() * maxH * 0.75, 0.14 + rng() * 0.22, rng() * 6.283, rng() * 6.283);
+  }
+  const count = positions.length / 3;
+  geo.instanceCount = count;
+  geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(new Float32Array(positions), 3));
+  geo.setAttribute('iParam', new THREE.InstancedBufferAttribute(new Float32Array(params), 4));
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: kelpUniforms,
+    side: THREE.DoubleSide,
+    vertexShader: `
+${COMMON_GLSL}
+attribute vec3 iPos;
+attribute vec4 iParam;
+varying float vV;
+varying float vStrip;
+varying vec3 vWorld;
+void main(){
+  float v = uv.y;
+  float hgt = iParam.x, wdt = iParam.y, phase = iParam.z, rot = iParam.w;
+  vec2 fl = flowAt(iPos.xz);
+  float mag = length(fl);
+  vec2 dir = mag > 0.001 ? fl / mag : vec2(1.0, 0.0);
+  float bf = clamp(mag * 0.14, 0.0, 1.0);
+  float bend = bf * hgt * 0.95 * v * v;
+  float sway = sin(uTime * OMG * 2.0 + phase + v * 2.2) * 0.22 * v * (1.0 - bf * 0.5);
+  vec2 perp = vec2(-dir.y, dir.x);
+  float yy = v * hgt * (1.0 - 0.30 * bf * v * v);
+  float lx = position.x * wdt;
+  float lz = sin(v * 3.14159) * 0.10 + sin(uTime * OMG * 3.0 + phase * 1.7 + v * 4.0) * 0.05 * v;
+  float cr = cos(rot), sr = sin(rot);
+  vec2 rl = vec2(lx * cr - lz * sr, lx * sr + lz * cr);
+  vec2 off = dir * bend + perp * sway;
+  vec3 world = vec3(iPos.x + rl.x + off.x, iPos.y + yy, iPos.z + rl.y + off.y);
+  vV = v; vStrip = position.x; vWorld = world;
+  gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
+}`,
+    fragmentShader: `
+uniform vec3 uFogColor;
+uniform float uFogNear;
+uniform float uFogFar;
+varying float vV;
+varying float vStrip;
+varying vec3 vWorld;
+void main(){
+  vec3 col = mix(vec3(0.085, 0.12, 0.045), vec3(0.33, 0.44, 0.15), vV);
+  col *= 0.85 + 0.15 * sin(vStrip * 24.0);
+  float depth = clamp(-vWorld.y / 7.0, 0.0, 1.0);
+  col = mix(col, col * vec3(0.35, 0.62, 0.66), depth * 0.8);
+  col *= 0.75 + 0.45 * vV;
+  float dist = length(cameraPosition - vWorld);
+  float f = smoothstep(uFogNear * 0.35, uFogFar * 0.65, dist);
+  col = mix(col, uFogColor * 0.55, f);
+  gl_FragColor = vec4(col, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`
+  });
+  const kelp = new THREE.Mesh(geo, mat);
+  kelp.frustumCulled = false;
+  scene.add(kelp);
+}
+
+/* ============================================================
+   FOAM FLECK PARTICLES — advected through the flow field,
+   spatial wrap with edge fading (no visible pop, no stutter)
+   ============================================================ */
+const P_COUNT = 1500, PW_COUNT = 380, PT_COUNT = P_COUNT + PW_COUNT;
+const pPos = new Float32Array(PT_COUNT * 3);
+const pSize = new Float32Array(PT_COUNT);
+const pAlpha = new Float32Array(PT_COUNT);
+const pRand = new Float32Array(PT_COUNT);
+for (let i = 0; i < PT_COUNT; i++) pRand[i] = rng();
+
+function spawnChannel(i, initial) {
+  let x, z, h, guard = 0;
+  do {
+    x = initial ? -85 + rng() * 175 : -88 + rng() * 18;
+    z = -24 + rng() * 48;
+    h = terrainHeight(x, z);
+  } while (h > -1.5 && guard++ < 40);
+  pPos[i * 3] = x; pPos[i * 3 + 1] = 0; pPos[i * 3 + 2] = z;
+  pSize[i] = 0.4 + rng() * 1.1;
+}
+function spawnWhirl(i) {
+  const a = rng() * Math.PI * 2, r = 4.5 + rng() * 6.0;
+  pPos[i * 3] = WHIRL.x + Math.cos(a) * r;
+  pPos[i * 3 + 1] = 0;
+  pPos[i * 3 + 2] = WHIRL.z + Math.sin(a) * r;
+  pSize[i] = 0.5 + rng() * 1.2;
+}
+for (let i = 0; i < P_COUNT; i++) spawnChannel(i, true);
+for (let i = P_COUNT; i < PT_COUNT; i++) spawnWhirl(i);
+
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute('aSize', new THREE.BufferAttribute(pSize, 1));
+pGeo.setAttribute('aAlpha', new THREE.BufferAttribute(pAlpha, 1));
+const pMat = new THREE.ShaderMaterial({
+  uniforms: { uTex: { value: spriteTex }, uPR: { value: Math.min(devicePixelRatio, 2) } },
+  transparent: true, depthWrite: false,
+  vertexShader: `
+attribute float aSize;
+attribute float aAlpha;
+uniform float uPR;
+varying float vA;
+void main(){
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_PointSize = aSize * uPR * (300.0 / max(-mv.z, 1.0));
+  gl_Position = projectionMatrix * mv;
+  vA = aAlpha;
+}`,
+  fragmentShader: `
+uniform sampler2D uTex;
+varying float vA;
+void main(){
+  float a = texture2D(uTex, gl_PointCoord).a * vA;
+  if (a < 0.01) discard;
+  gl_FragColor = vec4(vec3(0.88, 0.93, 0.94), a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`
+});
+const points = new THREE.Points(pGeo, pMat);
+points.renderOrder = 20;
+points.frustumCulled = false;
+scene.add(points);
+
+function updateParticles(dt, t) {
+  for (let i = 0; i < PT_COUNT; i++) {
+    const ix = i * 3;
+    let x = pPos[ix], z = pPos[ix + 2];
+    flowAtJS(x, z, _f);
+    const jit = 0.35;
+    x += _f.x * dt + Math.sin(t * 2.1 + pRand[i] * 40) * jit * dt;
+    z += _f.y * dt + Math.cos(t * 1.7 + pRand[i] * 31) * jit * dt;
+    let a = 0.55 + pRand[i] * 0.4;
+    if (i < P_COUNT) {
+      if (x > 92 || Math.abs(z) > 44 || terrainHeight(x, z) > -0.6) { spawnChannel(i, false); pAlpha[i] = 0; continue; }
+      a *= clamp01((x + 88) / 14) * (1 - clamp01((x - 74) / 16));
+    } else {
+      const dx = x - WHIRL.x, dz = z - WHIRL.z;
+      const r = Math.sqrt(dx * dx + dz * dz);
+      if (r < 1.35 || r > 13.5) { spawnWhirl(i); pAlpha[i] = 0; continue; }
+      a *= clamp01((r - 1.35) / 1.6) * (1 - clamp01((r - 10.5) / 3));
+      a = Math.min(a * 1.3, 1);
+    }
+    pPos[ix] = x; pPos[ix + 2] = z;
+    pPos[ix + 1] = heightAtJS(x, z, t) + 0.07;
+    pAlpha[i] = a;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.aAlpha.needsUpdate = true;
+  pGeo.attributes.aSize.needsUpdate = true;
+}
+
+/* ============================================================
+   UI — tide slider, view presets
+   ============================================================ */
+const tideSlider = document.getElementById('tide');
+function applyTide() {
+  tide = tideSlider.value / 100;
+  streakTiles = Math.max(1, Math.round(BASE.speed * tide * 0.045 * LOOP_T));
+  whirlK = 3 + Math.max(1, Math.round(2 * tide));
+  const dip = WHIRL.dip * (0.55 + 0.45 * tide);
+  waterUniforms.uTide.value = tide;
+  waterUniforms.uStreakScroll.value = streakTiles / LOOP_T;
+  waterUniforms.uWhirlSpin.value = whirlK * OMG;
+  waterUniforms.uWhirlDip.value = dip;
+  kelpUniforms.uTide.value = tide;
+  kelpUniforms.uWhirlDip.value = dip;
+  document.getElementById('readout-flow').textContent = (5.8 * tide).toFixed(1) + ' kn';
+  document.getElementById('readout-tide').textContent = Math.round(tide * 100) + '%';
+  document.getElementById('readout-state').textContent =
+    tide < 0.7 ? 'EBB' : tide < 0.95 ? 'NEAP' : tide <= 1.2 ? 'FLOOD' : 'SPRING';
+}
+tideSlider.addEventListener('input', applyTide);
+applyTide();
+
+const VIEWS = {
+  overview: { p: [-46, 30, 42], t: [6, 0, -2] },
+  whirlpool: { p: [1.5, 12, 10], t: [WHIRL.x, -1, WHIRL.z] },
+  drift: { p: [-26, 4.5, 13], t: [16, 0.5, -4] }
+};
+let camTween = null;
+function flyTo(name) {
+  const v = VIEWS[name];
+  camTween = {
+    t: 0, dur: 1.5,
+    p0: camera.position.clone(), p1: new THREE.Vector3(...v.p),
+    t0: controls.target.clone(), t1: new THREE.Vector3(...v.t)
+  };
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+}
+document.querySelectorAll('.view-btn').forEach(b => b.addEventListener('click', () => flyTo(b.dataset.view)));
+renderer.domElement.addEventListener('pointerdown', () => { camTween = null; });
+
+/* ============================================================
+   MAIN LOOP — wrapped master clock guarantees a clean 24 s loop
+   ============================================================ */
+const clock = new THREE.Clock();
+let firstFrame = true;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime % LOOP_T;
+
+  waterUniforms.uTime.value = t;
+  kelpUniforms.uTime.value = t;
+
+  updateParticles(dt, t);
+
+  if (camTween) {
+    camTween.t += dt / camTween.dur;
+    const k = camTween.t >= 1 ? 1 : (camTween.t < 0.5 ? 4 * camTween.t ** 3 : 1 - ((-2 * camTween.t + 2) ** 3) / 2);
+    camera.position.lerpVectors(camTween.p0, camTween.p1, k);
+    controls.target.lerpVectors(camTween.t0, camTween.t1, k);
+    if (camTween.t >= 1) camTween = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+
+  if (firstFrame) {
+    firstFrame = false;
+    const f = document.getElementById('fadeout');
+    f.style.opacity = '0';
+    setTimeout(() => f.remove(), 1600);
+  }
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Titration Rig — Afternoon Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<style>
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body { font-family: 'Space Grotesk', system-ui, sans-serif; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  #scene-container canvas { display: block; touch-action: none; }
+  .panel { background: rgba(251,250,246,0.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(20,18,14,0.10); box-shadow: 0 10px 34px rgba(20,16,10,0.14); }
+  .chip { transition: background-color .25s ease, color .25s ease; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body class="bg-[#181410]">
+
+<!-- 3D viewport -->
+<div id="scene-container" class="fixed inset-0"></div>
+
+<!-- Loader -->
+<div id="loader" class="fixed inset-0 z-50 flex items-center justify-center bg-[#efe9df] transition-opacity duration-700">
+  <div class="flex flex-col items-center gap-4 text-neutral-800">
+    <div class="w-14 h-14 rounded-2xl bg-neutral-900 text-[#efe9df] flex items-center justify-center animate-pulse">
+      <i data-lucide="flask-conical" class="w-7 h-7"></i>
+    </div>
+    <div class="text-[11px] tracking-[0.35em] font-medium text-neutral-500">PREPARING BENCH</div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div class="fixed inset-0 z-40 pointer-events-none select-none">
+
+  <!-- Title / top-left -->
+  <div class="absolute top-4 left-4 panel rounded-2xl px-4 py-3.5 pointer-events-auto max-w-[300px]">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-neutral-900 text-[#f5f1e8] flex items-center justify-center shrink-0">
+        <i data-lucide="flask-conical" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-[13px] font-semibold tracking-[0.22em] text-neutral-900">TITRATION RIG</div>
+        <div class="text-[11px] text-neutral-500 mt-0.5">0.100&nbsp;M NaOH → HCl + phenolphthalein</div>
+      </div>
+    </div>
+    <div class="mt-3 pt-3 border-t border-black/10 flex items-center gap-2 text-[11px] text-neutral-500">
+      <i data-lucide="sun" class="w-3.5 h-3.5 text-amber-600"></i>
+      <span>Lit by a single west window · 17:24</span>
+    </div>
+  </div>
+
+  <!-- Readout / top-right -->
+  <div class="absolute top-4 right-4 panel rounded-2xl p-4 pointer-events-auto w-[248px]">
+    <div class="flex items-center justify-between">
+      <span class="text-[10px] font-semibold tracking-[0.22em] text-neutral-500">VOLUME DELIVERED</span>
+      <i data-lucide="pipette" class="w-4 h-4 text-neutral-400"></i>
+    </div>
+    <div class="mono text-[30px] leading-none font-semibold text-neutral-900 mt-2">
+      <span id="vol">0.00</span><span class="text-[14px] text-neutral-400 font-medium"> mL</span>
+    </div>
+
+    <!-- progress to endpoint -->
+    <div class="relative mt-3 h-1.5 rounded-full bg-black/10">
+      <div id="volbar" class="absolute left-0 top-0 h-full rounded-full bg-rose-500 transition-[width] duration-150" style="width:0%"></div>
+      <div class="absolute top-[-3px] h-3 w-[2px] bg-neutral-800/70" style="left:75%"></div>
+    </div>
+    <div class="flex justify-between mt-1.5 text-[10px] text-neutral-400 mono">
+      <span>0</span><span class="text-neutral-500">endpoint 16.50</span><span>22</span>
+    </div>
+
+    <!-- flask state -->
+    <div class="mt-3.5 flex items-center gap-2">
+      <span id="flaskdot" class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#9aa5a1"></span>
+      <span id="flasklabel" class="text-[12px] text-neutral-600">Flask acidic — solution clear</span>
+    </div>
+
+    <!-- valve chip -->
+    <div class="mt-3 flex items-center gap-2">
+      <span id="chip" class="chip inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] bg-neutral-200/80 text-neutral-500">
+        <span id="chipdot" class="w-1.5 h-1.5 rounded-full bg-neutral-400"></span>
+        <span id="chiptext">STOPCOCK CLOSED</span>
+      </span>
+    </div>
+
+    <!-- buttons -->
+    <div class="mt-3.5 flex items-center gap-2">
+      <button id="valvebtn" class="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-neutral-900 text-[#f5f1e8] px-3 py-2.5 text-[12px] font-semibold tracking-wide hover:bg-neutral-700 active:scale-[0.98] transition cursor-pointer">
+        <i data-lucide="droplets" class="w-4 h-4"></i>
+        <span id="valvebtnlabel">Open stopcock</span>
+      </button>
+      <button id="resetbtn" title="Reset titration" class="inline-flex items-center justify-center rounded-xl border border-black/15 bg-white/60 w-10 h-10 text-neutral-600 hover:bg-white hover:text-neutral-900 active:scale-[0.96] transition cursor-pointer">
+        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Hints / bottom-left -->
+  <div class="absolute bottom-4 left-4 panel rounded-2xl px-4 py-3 pointer-events-auto">
+    <div class="flex flex-col gap-2 text-[11.5px] text-neutral-600">
+      <div class="flex items-center gap-2.5"><i data-lucide="move-3d" class="w-4 h-4 text-neutral-400"></i><span><b class="text-neutral-800 font-semibold">Drag</b> to orbit the bench</span></div>
+      <div class="flex items-center gap-2.5"><i data-lucide="zoom-in" class="w-4 h-4 text-neutral-400"></i><span><b class="text-neutral-800 font-semibold">Scroll / pinch</b> to zoom</span></div>
+      <div class="flex items-center gap-2.5"><i data-lucide="mouse-pointer-click" class="w-4 h-4 text-rose-500"></i><span><b class="text-neutral-800 font-semibold">Click the stopcock handle</b> to titrate</span></div>
+    </div>
+  </div>
+
+  <!-- Apparatus key / bottom-right -->
+  <div class="absolute bottom-4 right-4 panel rounded-2xl px-4 py-3 pointer-events-auto hidden md:block">
+    <div class="flex items-center gap-4 text-[11px] text-neutral-500">
+      <span class="flex items-center gap-1.5"><i data-lucide="ruler" class="w-3.5 h-3.5"></i>50 mL burette</span>
+      <span class="flex items-center gap-1.5"><i data-lucide="anchor" class="w-3.5 h-3.5"></i>retort stand</span>
+      <span class="flex items-center gap-1.5"><i data-lucide="beaker" class="w-3.5 h-3.5"></i>conical flask</span>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* ============================================================
+   RENDERER / SCENE / CAMERA
+============================================================ */
+const container = document.getElementById('scene-container');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+container.appendChild(renderer.domElement);
+renderer.domElement.style.cursor = 'grab';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x17130e);
+scene.fog = new THREE.Fog(0x17130e, 3.2, 7.5);
+
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.02, 30);
+camera.position.set(0.55, 0.44, 0.62);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0.02, 0.235, 0.03);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 0.26;
+controls.maxDistance = 2.1;
+controls.minPolarAngle = 0.12;
+controls.maxPolarAngle = 1.46;
+controls.update();
+
+/* ============================================================
+   ENVIRONMENT — a dark room with ONE bright window.
+   The PMREM of this mini-room is the only image-based light:
+   every reflection on glass / steel / tile comes from that window.
+============================================================ */
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene();
+{
+  const room = new THREE.Mesh(
+    new THREE.BoxGeometry(6, 4, 6),
+    new THREE.MeshBasicMaterial({ color: 0x2b251d, side: THREE.BackSide })
+  );
+  room.position.y = 1.4;
+  envScene.add(room);
+
+  // the window (west wall of env room)
+  const win = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.9, 1.5),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(5.2, 3.7, 1.9) })
+  );
+  win.position.set(-2.94, 1.55, 0);
+  win.rotation.y = Math.PI / 2;
+  envScene.add(win);
+
+  // hot sun patch inside the window
+  const sun = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.55, 0.55),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(11, 7.5, 3.8) })
+  );
+  sun.position.set(-2.9, 1.85, 0.25);
+  sun.rotation.y = Math.PI / 2;
+  envScene.add(sun);
+
+  // faint cool bounce from the opposite wall so glass has shape
+  const fill = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 2.0),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0.10, 0.11, 0.13) })
+  );
+  fill.position.set(2.94, 1.3, 0);
+  fill.rotation.y = -Math.PI / 2;
+  envScene.add(fill);
+
+  // dim warm floor bounce
+  const flr = new THREE.Mesh(
+    new THREE.PlaneGeometry(5.6, 5.6),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0.20, 0.16, 0.11) })
+  );
+  flr.rotation.x = -Math.PI / 2;
+  flr.position.y = -0.55;
+  envScene.add(flr);
+}
+scene.environment = pmrem.fromScene(envScene, 0.05).texture;
+scene.environmentIntensity = 0.5;
+pmrem.dispose();
+
+/* ============================================================
+   LIGHTING — one directional "sun" shining through the window.
+   A whisper of hemisphere light keeps shadows from going black;
+   the window does all the real work.
+============================================================ */
+const sunLight = new THREE.DirectionalLight(0xffc27d, 3.6);
+sunLight.position.set(-1.55, 1.18, -0.12);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.near = 0.2;
+sunLight.shadow.camera.far = 5;
+sunLight.shadow.camera.left = -1.6;
+sunLight.shadow.camera.right = 1.6;
+sunLight.shadow.camera.top = 1.6;
+sunLight.shadow.camera.bottom = -1.6;
+sunLight.shadow.bias = -0.00015;
+sunLight.shadow.normalBias = 0.004;
+scene.add(sunLight);
+sunLight.target.position.set(0.12, 0.02, 0.04);
+scene.add(sunLight.target);
+
+scene.add(new THREE.HemisphereLight(0xffdfb4, 0x50483c, 0.16));
+
+/* ============================================================
+   SHARED MATERIALS
+============================================================ */
+const glassMat = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff, metalness: 0, roughness: 0.05,
+  transmission: 1.0, thickness: 0.003, ior: 1.52,
+  clearcoat: 0.5, clearcoatRoughness: 0.06,
+  envMapIntensity: 1.1, side: THREE.DoubleSide
+});
+const steelMat = new THREE.MeshStandardMaterial({ color: 0xb9bfc7, metalness: 0.95, roughness: 0.24, envMapIntensity: 0.9 });
+const ironMat  = new THREE.MeshStandardMaterial({ color: 0x24262a, metalness: 0.35, roughness: 0.55 });
+const teflonMat = new THREE.MeshStandardMaterial({ color: 0xf0ece2, metalness: 0, roughness: 0.35 });
+const titrantPink = new THREE.Color(0xff5c9d);
+
+/* ============================================================
+   ROOM — floor, back wall, and a west wall with a real window
+   opening. The sun passes through the hole, so the frame paints
+   a true window-shaped patch of afternoon light on the bench.
+============================================================ */
+const plasterMat = new THREE.MeshStandardMaterial({ color: 0xd8d0bf, roughness: 0.95 });
+const wallX = -0.78;                 // west wall plane
+const op = { y0: 0.42, y1: 0.98, z0: -0.38, z1: 0.12 }; // window opening
+
+function addWallBox(w, h, d, x, y, z, mat = plasterMat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m); return m;
+}
+// west wall segments around the opening (wall spans z -0.85..0.75, y 0..1.5)
+addWallBox(0.06, op.y0, 1.6, wallX, op.y0 / 2, -0.05);                          // below
+addWallBox(0.06, 1.5 - op.y1, 1.6, wallX, (1.5 + op.y1) / 2, -0.05);            // above
+addWallBox(0.06, op.y1 - op.y0, op.z0 + 0.85, wallX, (op.y0 + op.y1) / 2, (-0.85 + op.z0) / 2); // back segment
+addWallBox(0.06, op.y1 - op.y0, 0.75 - op.z1, wallX, (op.y0 + op.y1) / 2, (op.z1 + 0.75) / 2);  // front segment
+
+// white window frame: mullions + sill
+const frameMat = new THREE.MeshStandardMaterial({ color: 0xf1ede3, roughness: 0.5 });
+addWallBox(0.07, op.y1 - op.y0, 0.035, wallX, (op.y0 + op.y1) / 2, (op.z0 + op.z1) / 2, frameMat);       // vertical bar
+addWallBox(0.07, 0.035, op.z1 - op.z0, wallX, (op.y0 + op.y1) / 2, (op.z0 + op.z1) / 2, frameMat);       // horizontal bar
+addWallBox(0.12, 0.022, op.z1 - op.z0 + 0.08, wallX + 0.02, op.y0 - 0.011, (op.z0 + op.z1) / 2, frameMat); // sill
+
+// back wall + floor
+addWallBox(3.2, 1.5, 0.06, 0.1, 0.75, -0.66);
+{
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshStandardMaterial({ color: 0x4b443b, roughness: 1 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -0.062;
+  floor.receiveShadow = true;
+  scene.add(floor);
+}
+
+// the glowing afternoon sky seen THROUGH the window
+{
+  const sky = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.62, 0.66),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(2.7, 1.95, 1.05), toneMapped: false })
+  );
+  sky.rotation.y = Math.PI / 2;
+  sky.position.set(wallX - 0.09, (op.y0 + op.y1) / 2, (op.z0 + op.z1) / 2);
+  scene.add(sky);
+
+  const sunDisc = new THREE.Mesh(
+    new THREE.CircleGeometry(0.055, 40),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(6.5, 4.6, 2.4), toneMapped: false })
+  );
+  sunDisc.rotation.y = Math.PI / 2;
+  sunDisc.position.set(wallX - 0.085, 0.80, -0.06);
+  scene.add(sunDisc);
+}
+
+/* ============================================================
+   BENCH + WHITE TILE
+============================================================ */
+{
+  const bench = new THREE.Mesh(
+    new RoundedBoxGeometry(1.75, 0.05, 1.15, 4, 0.012),
+    new THREE.MeshStandardMaterial({ color: 0x6f7268, roughness: 0.85 })
+  );
+  bench.position.set(0.1, -0.037, 0.05);
+  bench.castShadow = true; bench.receiveShadow = true;
+  scene.add(bench);
+}
+const tile = new THREE.Mesh(
+  new RoundedBoxGeometry(0.62, 0.012, 0.45, 3, 0.004),
+  new THREE.MeshPhysicalMaterial({
+    color: 0xf7f6f2, roughness: 0.1, metalness: 0,
+    clearcoat: 1.0, clearcoatRoughness: 0.07, envMapIntensity: 0.75
+  })
+);
+tile.position.set(0, -0.006, 0.02);
+tile.receiveShadow = true; tile.castShadow = true;
+scene.add(tile);
+
+/* reagent bottles catching the light (props) */
+function bottle(x, z, r, h, mat, capColor) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 40), mat);
+  body.position.y = h / 2;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.36, r * 0.36, 0.03, 24), mat);
+  neck.position.y = h + 0.015;
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.42, r * 0.42, 0.018, 24),
+    new THREE.MeshStandardMaterial({ color: capColor, roughness: 0.4 }));
+  cap.position.y = h + 0.036;
+  g.add(body, neck, cap);
+  g.position.set(x, -0.012, z);
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(g);
+}
+bottle(0.37, -0.17, 0.034, 0.10, new THREE.MeshPhysicalMaterial({
+  color: 0xb06a1e, roughness: 0.12, transmission: 0.55, thickness: 0.06,
+  attenuationColor: new THREE.Color(0x7a3c08), attenuationDistance: 0.035, ior: 1.5
+}), 0x1f1e1c);
+bottle(0.46, 0.0, 0.027, 0.082, glassMat.clone(), 0x3a3f45);
+
+/* ============================================================
+   RETORT STAND — cast-iron base, steel rod, clamp ring
+============================================================ */
+const ROD = { x: -0.09, z: 0.06 };
+{
+  const base = new THREE.Mesh(new RoundedBoxGeometry(0.17, 0.02, 0.11, 3, 0.007), ironMat);
+  base.position.set(ROD.x, 0.010, ROD.z);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.70, 24), steelMat);
+  rod.position.set(ROD.x, 0.02 + 0.35, ROD.z);
+  // bosshead
+  const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.022, 20), ironMat);
+  boss.rotation.z = Math.PI / 2;
+  boss.position.set(ROD.x, 0.56, ROD.z);
+  // clamp arm
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.0042, 0.0042, 0.148, 16), steelMat);
+  arm.rotation.z = Math.PI / 2;
+  arm.position.set((ROD.x + 0.06) / 2 - 0.002, 0.56, ROD.z);
+  // clamp ring around burette
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0148, 0.0034, 14, 40), steelMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0.06, 0.56, ROD.z);
+  for (const m of [base, rod, boss, arm, ring]) {
+    m.castShadow = true; m.receiveShadow = true; scene.add(m);
+  }
+}
+
+/* ============================================================
+   BURETTE — graduated glass tube, pink titrant, stopcock, tip
+============================================================ */
+const BUR = { x: 0.06, z: 0.06 };
+const burTubeBottom = 0.2175, burTubeH = 0.46, burTubeTop = burTubeBottom + burTubeH;
+const LIQ_BASE = burTubeBottom, LIQ_MAX_H = 0.435;
+
+// glass tube + rolled rim
+{
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.0115, 0.0115, burTubeH, 48, 1, true), glassMat);
+  tube.position.set(BUR.x, burTubeBottom + burTubeH / 2, BUR.z);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.0113, 0.0016, 10, 40), glassMat);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.set(BUR.x, burTubeTop, BUR.z);
+  // tapered base into stopcock
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.0115, 0.006, 0.035, 32), glassMat);
+  cone.position.set(BUR.x, burTubeBottom - 0.0175, BUR.z);
+  scene.add(tube, rim, cone);
+}
+
+// graduation texture (0 mL at top → 50 at bottom), three columns so a
+// scale is always facing you as you orbit
+function makeGraduationTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 2048;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.fillStyle = '#242424';
+  ctx.strokeStyle = '#242424';
+  ctx.lineCap = 'butt';
+  for (let col = 0; col < 3; col++) {
+    const bx = col * 171 + 8;
+    ctx.font = '600 34px monospace';
+    ctx.fillText('mL', bx, 44);
+    for (let ml = 0; ml <= 50; ml++) {
+      const y = 78 + ml * 38.6;
+      const major = ml % 10 === 0, mid = ml % 5 === 0;
+      const len = major ? 62 : mid ? 46 : 28;
+      ctx.lineWidth = major ? 6 : 4;
+      ctx.beginPath(); ctx.moveTo(bx, y); ctx.lineTo(bx + len, y); ctx.stroke();
+      if (major) {
+        ctx.font = '600 46px monospace';
+        ctx.fillText(String(ml), bx + len + 12, y + 16);
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.x = -1;               // un-mirror for viewing from outside the glass
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+{
+  const marks = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0103, 0.0103, 0.44, 48, 1, true),
+    new THREE.MeshBasicMaterial({ map: makeGraduationTexture(), transparent: true, depthWrite: false })
+  );
+  marks.position.set(BUR.x, burTubeBottom + 0.22, BUR.z);
+  scene.add(marks);
+}
+
+// titrant column (origin at its bottom so we can scale the level)
+const titrantMat = new THREE.MeshPhysicalMaterial({
+  color: titrantPink, roughness: 0.08, transmission: 0.55, thickness: 0.02,
+  attenuationColor: titrantPink, attenuationDistance: 0.02, ior: 1.33,
+  clearcoat: 0.4, envMapIntensity: 0.8
+});
+const burLiquidGeo = new THREE.CylinderGeometry(0.0096, 0.0096, 1, 32);
+burLiquidGeo.translate(0, 0.5, 0);
+const burLiquid = new THREE.Mesh(burLiquidGeo, titrantMat);
+burLiquid.position.set(BUR.x, LIQ_BASE, BUR.z);
+burLiquid.castShadow = true;
+scene.add(burLiquid);
+const meniscus = new THREE.Mesh(new THREE.CircleGeometry(0.0096, 32),
+  new THREE.MeshPhysicalMaterial({ color: 0xff7fb1, roughness: 0.05, clearcoat: 1 }));
+meniscus.rotation.x = -Math.PI / 2;
+meniscus.position.set(BUR.x, LIQ_BASE + LIQ_MAX_H, BUR.z);
+scene.add(meniscus);
+
+/* ---- stopcock (clickable) ---- */
+const stopcockHit = [];
+const handleGroup = new THREE.Group();
+{
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.0072, 0.0072, 0.05, 24), glassMat);
+  barrel.rotation.z = Math.PI / 2;
+  barrel.position.set(BUR.x, 0.185, BUR.z);
+  const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.0062, 0.0062, 0.037, 20), teflonMat);
+  plug.rotation.z = Math.PI / 2;
+  plug.position.set(BUR.x + 0.004, 0.185, BUR.z);
+  plug.castShadow = true;
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.006, 20), teflonMat);
+  collar.rotation.z = Math.PI / 2;
+  collar.position.set(0, 0, 0);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.036, 0.013), teflonMat);
+  wing.position.x = 0.006;
+  wing.castShadow = true;
+  handleGroup.add(collar, wing);
+  handleGroup.position.set(BUR.x + 0.026, 0.185, BUR.z);
+  handleGroup.rotation.x = Math.PI / 2;  // closed: wing horizontal
+  scene.add(barrel, plug, handleGroup);
+  stopcockHit.push(barrel, plug, wing, collar);
+}
+// delivery tip
+{
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0022, 0.045, 24), glassMat);
+  tip.position.set(BUR.x, 0.160, BUR.z);
+  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0018, 0.012, 16), glassMat);
+  nozzle.position.set(BUR.x, 0.132, BUR.z);
+  scene.add(tip, nozzle);
+}
+
+/* ============================================================
+   CONICAL (ERLENMEYER) FLASK — lathed glass with real wall
+============================================================ */
+const FLASK = { x: 0.06, z: 0.06 };
+const FLASK_LIQ_TOP = 0.0505;
+{
+  const p = [
+    [0.001, 0.004], [0.028, 0.004], [0.048, 0.006], [0.052, 0.010],
+    [0.0500, 0.018], [0.0435, 0.058], [0.0340, 0.098], [0.0200, 0.120],
+    [0.0165, 0.128], [0.0165, 0.142], [0.0180, 0.146], [0.0180, 0.150],
+    [0.0156, 0.150], [0.0145, 0.144], [0.0145, 0.124], [0.0180, 0.118],
+    [0.0320, 0.096], [0.0415, 0.056], [0.0478, 0.016], [0.0450, 0.010],
+    [0.001, 0.010]
+  ].map(([r, y]) => new THREE.Vector2(r, y));
+  const flask = new THREE.Mesh(new THREE.LatheGeometry(p, 72), glassMat);
+  flask.position.set(FLASK.x, 0, FLASK.z);
+  flask.receiveShadow = true;
+  scene.add(flask);
+}
+
+// flask contents — starts as clear acid, blushes pink past the endpoint
+const flaskLiqMat = new THREE.MeshPhysicalMaterial({
+  color: 0xf2f6f5, roughness: 0.15, transmission: 0.92, thickness: 0.03,
+  ior: 1.33, clearcoat: 0.3, envMapIntensity: 0.7
+});
+const flaskLiquidGroup = new THREE.Group();
+flaskLiquidGroup.position.set(FLASK.x, 0, FLASK.z);
+{
+  const p = [
+    [0.001, 0.011], [0.040, 0.011], [0.0460, 0.015],
+    [0.0442, 0.030], [0.0410, FLASK_LIQ_TOP], [0.001, FLASK_LIQ_TOP]
+  ].map(([r, y]) => new THREE.Vector2(r, y));
+  const liq = new THREE.Mesh(new THREE.LatheGeometry(p, 64), flaskLiqMat);
+  liq.castShadow = true;
+  flaskLiquidGroup.add(liq);
+}
+scene.add(flaskLiquidGroup);
+
+/* ============================================================
+   DROPS, RIPPLES, DUST
+============================================================ */
+const dropGeo = new THREE.SphereGeometry(0.0021, 12, 10);
+dropGeo.scale(1, 1.55, 1);
+const drops = [];
+for (let i = 0; i < 12; i++) {
+  const d = new THREE.Mesh(dropGeo, titrantMat);
+  d.visible = false;
+  scene.add(d);
+  drops.push({ mesh: d, vy: 0, active: false });
+}
+const ripples = [];
+for (let i = 0; i < 6; i++) {
+  const r = new THREE.Mesh(
+    new THREE.RingGeometry(0.0032, 0.0046, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })
+  );
+  r.rotation.x = -Math.PI / 2;
+  r.position.y = FLASK_LIQ_TOP + 0.002;
+  r.visible = false;
+  scene.add(r);
+  ripples.push({ mesh: r, t: 1, active: false });
+}
+// dust motes drifting in the light shaft
+let dust, dustBase, dustPhase;
+{
+  const N = 170;
+  dustBase = new Float32Array(N * 3);
+  dustPhase = new Float32Array(N);
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    dustBase[i * 3]     = -0.72 + Math.random() * 1.05;
+    dustBase[i * 3 + 1] =  0.05 + Math.random() * 0.9;
+    dustBase[i * 3 + 2] = -0.36 + Math.random() * 0.55;
+    dustPhase[i] = Math.random() * Math.PI * 2;
+  }
+  pos.set(dustBase);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  dust = new THREE.Points(g, new THREE.PointsMaterial({
+    color: 0xffd9a0, size: 0.0032, sizeAttenuation: true,
+    transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  scene.add(dust);
+}
+
+/* ============================================================
+   SIMULATION STATE + UI
+============================================================ */
+const EP = 16.5;                    // endpoint volume (mL)
+let vol = 0;                        // delivered mL
+let valveOpen = false;
+let handleTarget = Math.PI / 2;
+let swirlVel = 0;
+let dripTimer = 0;
+
+const volEl = document.getElementById('vol');
+const volbar = document.getElementById('volbar');
+const chip = document.getElementById('chip');
+const chipdot = document.getElementById('chipdot');
+const chiptext = document.getElementById('chiptext');
+const flaskdot = document.getElementById('flaskdot');
+const flasklabel = document.getElementById('flasklabel');
+const valvebtn = document.getElementById('valvebtn');
+const valvebtnlabel = document.getElementById('valvebtnlabel');
+const resetbtn = document.getElementById('resetbtn');
+
+const acidColor = new THREE.Color(0xf2f6f5);
+const pinkColor = new THREE.Color(0xff5c9d);
+const tmpColor = new THREE.Color();
+
+function refreshChemistry() {
+  // indicator transition across ±0.8 mL around the endpoint
+  const t = THREE.MathUtils.clamp((vol - (EP - 0.8)) / 1.6, 0, 1);
+  tmpColor.lerpColors(acidColor, pinkColor, t);
+  flaskLiqMat.color.copy(tmpColor);
+  flaskLiqMat.transmission = THREE.MathUtils.lerp(0.92, 0.38, t);
+
+  if (vol >= 50) { flaskdot.style.background = '#be123c'; flasklabel.textContent = 'Excess titrant — deep pink'; }
+  else if (t >= 1) { flaskdot.style.background = '#e11d48'; flasklabel.textContent = 'Endpoint — persistent pink'; }
+  else if (t > 0) { flaskdot.style.background = '#e090b0'; flasklabel.textContent = 'Approaching endpoint…'; }
+  else { flaskdot.style.background = '#9aa5a1'; flasklabel.textContent = 'Flask acidic — solution clear'; }
+
+  // burette level
+  const h = LIQ_MAX_H * Math.max(0, 1 - vol / 50);
+  burLiquid.scale.y = Math.max(h, 0.0001);
+  meniscus.position.y = LIQ_BASE + h;
+  burLiquid.visible = h > 0.0005;
+  meniscus.visible = h > 0.0005;
+}
+function refreshValveUI() {
+  const empty = vol >= 50;
+  if (empty) {
+    chip.className = 'chip inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] bg-amber-100 text-amber-800';
+    chipdot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500';
+    chiptext.textContent = 'BURETTE EMPTY';
+  } else if (valveOpen) {
+    chip.className = 'chip inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] bg-rose-100 text-rose-700';
+    chipdot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse';
+    chiptext.textContent = 'STOPCOCK OPEN';
+  } else {
+    chip.className = 'chip inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] bg-neutral-200/80 text-neutral-500';
+    chipdot.className = 'w-1.5 h-1.5 rounded-full bg-neutral-400';
+    chiptext.textContent = 'STOPCOCK CLOSED';
+  }
+  valvebtnlabel.textContent = valveOpen ? 'Close stopcock' : 'Open stopcock';
+}
+function setValve(open) {
+  if (vol >= 50) open = false;
+  valveOpen = open;
+  handleTarget = open ? 0 : Math.PI / 2;
+  refreshValveUI();
+}
+function resetAll() {
+  vol = 0; swirlVel = 0;
+  setValve(false);
+  for (const d of drops) { d.active = false; d.mesh.visible = false; }
+  for (const r of ripples) { r.active = false; r.mesh.visible = false; }
+  refreshChemistry();
+  refreshValveUI();
+}
+valvebtn.addEventListener('click', () => setValve(!valveOpen));
+resetbtn.addEventListener('click', resetAll);
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !e.repeat) { e.preventDefault(); setValve(!valveOpen); }
+});
+refreshChemistry(); refreshValveUI();
+
+/* ============================================================
+   PICKING — click the stopcock handle in 3D
+============================================================ */
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+let downX = 0, downY = 0;
+let hoverCheck = false;
+
+function castAt(cx, cy) {
+  pointerNDC.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointerNDC, camera);
+  return raycaster.intersectObjects(stopcockHit, false);
+}
+renderer.domElement.addEventListener('pointerdown', e => {
+  downX = e.clientX; downY = e.clientY;
+  renderer.domElement.style.cursor = 'grabbing';
+});
+renderer.domElement.addEventListener('pointerup', e => {
+  renderer.domElement.style.cursor = 'grab';
+  if (Math.hypot(e.clientX - downX, e.clientY - downY) < 6 && castAt(e.clientX, e.clientY).length) {
+    setValve(!valveOpen);
+  }
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  pointerNDC.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  hoverCheck = true;
+});
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ============================================================
+   ANIMATION LOOP
+============================================================ */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // clamp pan so users can't lose the rig
+  controls.target.x = THREE.MathUtils.clamp(controls.target.x, -0.4, 0.45);
+  controls.target.y = THREE.MathUtils.clamp(controls.target.y, 0.05, 0.6);
+  controls.target.z = THREE.MathUtils.clamp(controls.target.z, -0.35, 0.35);
+  controls.update();
+
+  // stopcock handle easing
+  handleGroup.rotation.x += (handleTarget - handleGroup.rotation.x) * Math.min(1, dt * 12);
+
+  // hover cursor
+  if (hoverCheck) {
+    hoverCheck = false;
+    raycaster.setFromCamera(pointerNDC, camera);
+    const hit = raycaster.intersectObjects(stopcockHit, false).length > 0;
+    renderer.domElement.style.cursor = hit ? 'pointer' : 'grab';
+  }
+
+  // dispensing
+  if (valveOpen && vol < 50) {
+    dripTimer += dt;
+    while (dripTimer > 0.095) {
+      dripTimer -= 0.095;
+      const d = drops.find(d => !d.active);
+      if (d) {
+        d.active = true; d.vy = -0.12;
+        d.mesh.visible = true;
+        d.mesh.position.set(BUR.x + (Math.random() - 0.5) * 0.0008, 0.130, BUR.z + (Math.random() - 0.5) * 0.0008);
+      }
+    }
+  } else dripTimer = 0;
+
+  // falling drops
+  let changed = false;
+  for (const d of drops) {
+    if (!d.active) continue;
+    d.vy -= 6.5 * dt;
+    d.mesh.position.y += d.vy * dt;
+    if (d.mesh.position.y <= FLASK_LIQ_TOP + 0.002) {
+      d.active = false; d.mesh.visible = false;
+      vol = Math.min(50, vol + 0.05);
+      swirlVel += 2.2 + Math.random() * 1.4;
+      changed = true;
+      const r = ripples.find(r => !r.active);
+      if (r) {
+        r.active = true; r.t = 0;
+        r.mesh.visible = true;
+        r.mesh.position.x = FLASK.x + (Math.random() - 0.5) * 0.01;
+        r.mesh.position.z = FLASK.z + (Math.random() - 0.5) * 0.01;
+      }
+    }
+  }
+
+  // ripples
+  for (const r of ripples) {
+    if (!r.active) continue;
+    r.t += dt * 1.5;
+    const s = 1 + r.t * 4.2;
+    r.mesh.scale.set(s, s, 1);
+    r.mesh.material.opacity = Math.max(0, 0.55 * (1 - r.t));
+    if (r.t >= 1) { r.active = false; r.mesh.visible = false; }
+  }
+
+  // flask swirl + gentle wobble
+  swirlVel *= Math.exp(-dt * 1.1);
+  flaskLiquidGroup.rotation.y += swirlVel * dt;
+  const energy = Math.min(Math.abs(swirlVel) / 6, 1);
+  flaskLiquidGroup.rotation.x = Math.sin(t * 5.1) * 0.022 * energy;
+  flaskLiquidGroup.rotation.z = Math.cos(t * 4.3) * 0.022 * energy;
+
+  // burette meniscus shimmer while running
+  if (valveOpen && vol < 50) meniscus.position.y = LIQ_BASE + LIQ_MAX_H * Math.max(0, 1 - vol / 50) + Math.sin(t * 9) * 0.0004;
+
+  if (changed) {
+    volEl.textContent = vol.toFixed(2);
+    volbar.style.width = Math.min(vol / 22 * 100, 100) + '%';
+    refreshChemistry();
+    if (vol >= 50) setValve(false);
+  }
+
+  // drifting dust
+  {
+    const pos = dust.geometry.attributes.position;
+    for (let i = 0; i < dustPhase.length; i++) {
+      const p = dustPhase[i];
+      pos.array[i * 3]     = dustBase[i * 3]     + Math.sin(t * 0.22 + p) * 0.018;
+      pos.array[i * 3 + 1] = dustBase[i * 3 + 1] + Math.sin(t * 0.16 + p * 1.7) * 0.014;
+      pos.array[i * 3 + 2] = dustBase[i * 3 + 2] + Math.cos(t * 0.19 + p) * 0.016;
+    }
+    pos.needsUpdate = true;
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+/* ============================================================
+   RESIZE / BOOT
+============================================================ */
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+if (window.lucide) lucide.createIcons();
+requestAnimationFrame(() => {
+  const loader = document.getElementById('loader');
+  loader.classList.add('opacity-0');
+  setTimeout(() => loader.remove(), 750);
+});
+</script>
+</body>
+</html>

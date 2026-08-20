@@ -1,0 +1,2169 @@
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HarbourLab — Swell & Breakwater Simulator · Phase 01</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 20c4-6 8-6 12 0s8 6 12 0' stroke='%2322d3ee' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  html, body { height: 100%; }
+  body { font-family: 'Space Grotesk', system-ui, sans-serif; background: #0b141a; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ---- custom range sliders ---- */
+  input[type=range].hl { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; }
+  input[type=range].hl::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: linear-gradient(90deg, rgba(34,211,238,.75), rgba(34,211,238,.15)); }
+  input[type=range].hl::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #22d3ee; margin-top: -5.5px; border: 2px solid #062a33; box-shadow: 0 0 12px rgba(34,211,238,.8); }
+  input[type=range].hl::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(34,211,238,.25); }
+  input[type=range].hl::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #22d3ee; border: 2px solid #062a33; }
+
+  .panel-scroll::-webkit-scrollbar { width: 4px; }
+  .panel-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.25); border-radius: 2px; }
+
+  /* ---- floating 3D gauge label ---- */
+  #gaugeLabel {
+    transform: translate(-50%, -118%);
+    transition: opacity .25s;
+    pointer-events: none;
+    filter: drop-shadow(0 6px 16px rgba(0,0,0,.55));
+  }
+  #gaugeLabel::after {
+    content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px;
+    background: rgba(8,25,32,.92); border-right: 1px solid rgba(34,211,238,.45); border-bottom: 1px solid rgba(34,211,238,.45);
+    transform: translateX(-50%) rotate(45deg);
+  }
+
+  .live-dot { position: relative; }
+  .live-dot::after { content:''; position:absolute; inset:-4px; border-radius:50%; border:1px solid #34d399; animation: ping 1.6s cubic-bezier(0,0,.2,1) infinite; }
+  @keyframes ping { 0%{transform:scale(.6);opacity:.9} 100%{transform:scale(1.9);opacity:0} }
+
+  kbd { font-family:'JetBrains Mono',monospace; font-size:10px; padding:2px 6px; border-radius:5px; border:1px solid rgba(148,163,184,.3); border-bottom-width:2px; background:rgba(148,163,184,.08); color:#cbd5e1; }
+
+  .preset-btn { transition: all .15s; }
+  .preset-btn:hover { border-color: rgba(34,211,238,.6); color: #a5f3fc; }
+  .preset-btn.active { border-color: #22d3ee; color: #22d3ee; background: rgba(34,211,238,.08); }
+
+  #loader .bar { animation: load 1.4s ease-in-out infinite; }
+  @keyframes load { 0%{transform:translateX(-110%)} 100%{transform:translateX(320%)} }
+
+  #compassArrow { transform-box: fill-box; transform-origin: center; transition: transform .1s linear; }
+</style>
+</head>
+<body class="overflow-hidden text-slate-100 select-none">
+
+<canvas id="scene" class="fixed inset-0 w-full h-full block"></canvas>
+
+<!-- cinematic vignette -->
+<div class="pointer-events-none fixed inset-0 z-10" style="background: radial-gradient(ellipse at 50% 42%, transparent 55%, rgba(3,10,14,.55) 100%);"></div>
+
+<!-- ============ BRAND ============ -->
+<header class="fixed top-5 left-6 z-20 pointer-events-none">
+  <div class="flex items-center gap-3">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+      <path d="M2 21c4-6 8-6 12 0s8 6 12 0" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M2 27c4-6 8-6 12 0s8 6 12 0" stroke="#155e75" stroke-width="2.5" stroke-linecap="round"/>
+      <rect x="22" y="4" width="3.5" height="12" rx="1" fill="#e2e8f0"/>
+      <circle cx="23.75" cy="4" r="2" fill="#f87171"/>
+    </svg>
+    <div>
+      <h1 class="text-[15px] font-bold tracking-[0.22em] text-white leading-none">HARBOUR<span class="text-cyan-400">LAB</span></h1>
+      <p class="text-[9.5px] tracking-[0.3em] text-slate-400 mt-1">SWELL &amp; BREAKWATER SIMULATOR · PHASE 01</p>
+    </div>
+  </div>
+</header>
+
+<!-- ============ LEFT : SEA STATE + BREAKWATER ============ -->
+<aside class="fixed left-6 top-24 z-20 w-[268px] max-h-[calc(100vh-170px)] overflow-y-auto panel-scroll rounded-2xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-2xl">
+  <div class="p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-[10px] font-semibold tracking-[0.28em] text-slate-400">SEA STATE</h2>
+      <button id="pauseBtn" class="mono text-[10px] px-2.5 py-1 rounded-md border border-white/15 hover:border-cyan-400/60 hover:text-cyan-300 transition-colors">II&nbsp;PAUSE</button>
+    </div>
+
+    <!-- swell height -->
+    <label class="block mb-4">
+      <div class="flex justify-between text-[10px] tracking-[0.18em] text-slate-400 mb-1">
+        <span>SWELL HEIGHT</span><span id="ampVal" class="mono text-cyan-300 text-[11px]">1.40 m</span>
+      </div>
+      <input id="amp" type="range" min="0" max="4" step="0.05" value="1.4" class="hl">
+    </label>
+
+    <!-- swell direction -->
+    <label class="block mb-1">
+      <div class="flex justify-between text-[10px] tracking-[0.18em] text-slate-400 mb-1">
+        <span>SWELL HEADING</span><span id="dirVal" class="mono text-cyan-300 text-[11px]">000°</span>
+      </div>
+    </label>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="flex-1"><input id="dir" type="range" min="0" max="360" step="1" value="0" class="hl"></div>
+      <svg width="46" height="46" viewBox="0 0 46 46" class="shrink-0">
+        <circle cx="23" cy="23" r="19" fill="rgba(8,25,32,.7)" stroke="rgba(148,163,184,.25)"/>
+        <text x="23" y="9.5" text-anchor="middle" font-size="7" fill="#64748b" font-family="JetBrains Mono">N</text>
+        <g id="compassArrow">
+          <path d="M23 12 L27 28 L23 25 L19 28 Z" fill="#22d3ee"/>
+        </g>
+        <circle cx="23" cy="23" r="2" fill="#0e7490"/>
+      </svg>
+    </div>
+    <p class="text-[9.5px] text-slate-500 -mt-2 mb-4 tracking-wide">000° = travelling onshore, toward the quay</p>
+
+    <!-- wavelength -->
+    <label class="block mb-4">
+      <div class="flex justify-between text-[10px] tracking-[0.18em] text-slate-400 mb-1">
+        <span>WAVELENGTH</span>
+        <span class="mono text-[11px]"><span id="lenVal" class="text-cyan-300">90 m</span> <span class="text-slate-500">· T ≈</span> <span id="periodVal" class="text-slate-300">7.6 s</span></span>
+      </div>
+      <input id="len" type="range" min="30" max="160" step="1" value="90" class="hl">
+    </label>
+
+    <!-- presets -->
+    <div class="grid grid-cols-3 gap-2 mb-1">
+      <button data-preset="calm"  class="preset-btn mono text-[9.5px] tracking-widest py-1.5 rounded-md border border-white/15 text-slate-400">CALM</button>
+      <button data-preset="moderate" class="preset-btn active mono text-[9.5px] tracking-widest py-1.5 rounded-md border border-white/15 text-slate-400">MODERATE</button>
+      <button data-preset="storm" class="preset-btn mono text-[9.5px] tracking-widest py-1.5 rounded-md border border-white/15 text-slate-400">STORM</button>
+    </div>
+  </div>
+
+  <div class="border-t border-white/10 p-5">
+    <h2 class="text-[10px] font-semibold tracking-[0.28em] text-slate-400 mb-1">BREAKWATER</h2>
+    <p class="text-[10px] text-slate-500 mb-4 leading-relaxed">Grab the structure <span class="text-cyan-300/90">directly in the 3D view</span> and drag it across the water. Watch the lee zone open up behind it.</p>
+    <label class="block mb-4">
+      <div class="flex justify-between text-[10px] tracking-[0.18em] text-slate-400 mb-1">
+        <span>ORIENTATION</span><span id="angleVal" class="mono text-cyan-300 text-[11px]">−12°</span>
+      </div>
+      <input id="angle" type="range" min="-90" max="90" step="1" value="-12" class="hl">
+    </label>
+    <button id="resetBtn" class="w-full mono text-[10px] tracking-[0.2em] py-2 rounded-md border border-white/15 hover:border-cyan-400/60 hover:text-cyan-300 transition-colors">RESET POSITION</button>
+  </div>
+</aside>
+
+<!-- ============ RIGHT : QUAY GAUGE ============ -->
+<aside class="fixed right-6 top-24 z-20 w-[272px] rounded-2xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-2xl hidden md:block">
+  <div class="p-5">
+    <div class="flex items-center justify-between mb-1">
+      <h2 class="text-[10px] font-semibold tracking-[0.28em] text-slate-400">QUAY WAVE GAUGE</h2>
+      <span class="flex items-center gap-2 text-[9px] mono tracking-widest text-emerald-400"><span class="live-dot w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>LIVE</span>
+    </div>
+    <p class="text-[9.5px] text-slate-500 mb-3 tracking-wide">STATION Q-01 · STAFF GAUGE ON QUAY WALL</p>
+
+    <div class="flex items-end gap-2 mb-1">
+      <span id="gaugeNum" class="mono text-[38px] leading-none font-bold text-white">0.00</span>
+      <span class="mono text-sm text-slate-400 pb-1">m</span>
+    </div>
+    <div class="flex gap-4 text-[10px] mono mb-3">
+      <span class="text-slate-500">OFFSHORE <span id="offNum" class="text-slate-300">0.00 m</span></span>
+      <span class="text-slate-500">SHELTERING <span id="shelterPct" class="text-cyan-300">0%</span></span>
+    </div>
+
+    <div class="rounded-lg border border-white/10 bg-black/30 p-2 mb-3">
+      <canvas id="chart" class="w-full h-16 block"></canvas>
+      <div class="flex justify-between text-[8.5px] mono text-slate-600 mt-1 px-0.5">
+        <span>−20 s</span><span class="text-slate-500">WAVE HEIGHT @ QUAY (CYAN) vs OFFSHORE (WHITE)</span><span>NOW</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <div class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+        <div class="text-[8.5px] tracking-[0.2em] text-slate-500 mb-0.5">HMAX · 20 S</div>
+        <div id="hmaxVal" class="mono text-sm text-slate-200">0.00 m</div>
+      </div>
+      <div class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+        <div class="text-[8.5px] tracking-[0.2em] text-slate-500 mb-0.5">MEAN · 20 S</div>
+        <div id="meanVal" class="mono text-sm text-slate-200">0.00 m</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- floating label anchored to the 3D gauge pole -->
+<div id="gaugeLabel" class="fixed z-20 left-0 top-0 opacity-0">
+  <div class="rounded-lg border border-cyan-400/40 bg-[#081920]/95 px-3 py-1.5 text-center">
+    <div class="text-[8px] tracking-[0.25em] text-cyan-300/80 mono">QUAY&nbsp;Q-01</div>
+    <div class="mono text-[15px] font-bold text-white leading-tight"><span id="gaugeLabelVal">0.00</span><span class="text-[10px] text-slate-400"> m</span></div>
+  </div>
+</div>
+
+<!-- ============ FOOTER ============ -->
+<footer class="fixed bottom-5 left-6 z-20 pointer-events-none">
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-slate-400">
+    <span><kbd>DRAG</kbd> breakwater to reposition</span>
+    <span><kbd>L-DRAG</kbd> orbit</span>
+    <span><kbd>WHEEL</kbd> zoom</span>
+    <span><kbd>SPACE</kbd> pause</span>
+  </div>
+</footer>
+
+<div class="fixed bottom-5 right-6 z-20 pointer-events-none text-right hidden md:block">
+  <p class="mono text-[9px] leading-relaxed text-slate-500">PHASE-2 READY · WATER SURFACE QUERYABLE<br><span class="text-cyan-400/70">window.Harbor.sampleWater(x, z) → { height, normal, attenuation }</span></p>
+</div>
+
+<!-- ============ LOADER ============ -->
+<div id="loader" class="fixed inset-0 z-50 grid place-items-center bg-[#0b141a]">
+  <div class="text-center">
+    <svg width="44" height="44" viewBox="0 0 32 32" fill="none" class="mx-auto mb-4">
+      <path d="M2 21c4-6 8-6 12 0s8 6 12 0" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M2 27c4-6 8-6 12 0s8 6 12 0" stroke="#155e75" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <p class="mono text-[10px] tracking-[0.35em] text-slate-400 mb-3">INITIALIZING HARBOUR SIMULATION</p>
+    <div class="w-44 h-[3px] mx-auto rounded-full bg-white/10 overflow-hidden"><div class="bar h-full w-1/3 rounded-full bg-cyan-400"></div></div>
+    <p id="loaderMsg" class="mono text-[9px] text-slate-600 mt-3">loading three.js modules…</p>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+const el = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+
+/* ================================================================
+   SECTION 1 — SIMULATION STATE
+   The swell parameters are smoothed toward UI targets each frame so
+   the sea surface never pops when sliders move.
+================================================================ */
+const swell = {
+  amp: 1.4,  ampT: 1.4,     // significant amplitude (m)
+  dir: 0,    dirT: 0,       // heading (rad) waves travel TOWARD. 0 = +z (onshore)
+  len: 90,   lenT: 90       // wavelength (m)
+};
+let simT = 0, paused = false;
+
+/* ================================================================
+   SECTION 2 — ANALYTIC WAVE FIELD  ★ PHASE-2 CRITICAL ★
+   ---------------------------------------------------------------
+   The water surface is defined by a PURE FUNCTION of (x, z, t):
+   a sum of directional sinusoids (deep-water dispersion ω=√gk),
+   modulated by breakwater sheltering. This is the QUERY surface —
+   exposed via window.Harbor.sampleWater() so phase-2 boats can ask
+   for buoyancy at any hull point, which needs h(x,z,t) invertible.
+
+   The RENDER surface (SECTION 4) trochoidalises the same spectrum:
+   the identical components are evaluated as Gerstner waves, which
+   drag surface particles horizontally into the crest and so give
+   the pinched peaks / broad troughs real swell has. Vertical profile
+   and phase are shared, so the query surface stays a faithful — and
+   still queryable — approximation of what is on screen.
+================================================================ */
+const NCOMP = 6;
+const comps = Array.from({ length: NCOMP }, () => ({ A: 0, k: 0, kx: 0, kz: 0, dx: 0, dz: 0, w: 1, phi: 0 }));
+let Ux = 0, Uz = -1; // upwind unit vector (world xz) — where swell comes FROM
+
+function setComp(i, A, L, headingRad, phi) {
+  const c = comps[i], k = 2 * Math.PI / L;
+  c.A = A; c.k = k;
+  c.dx = Math.sin(headingRad); c.dz = Math.cos(headingRad);
+  c.kx = k * c.dx;
+  c.kz = k * c.dz;
+  c.w = Math.sqrt(9.81 * k); // deep-water dispersion
+  c.phi = phi;
+}
+/* Six trains rather than four: the extra pair is what stops the sea from
+   reading as "one swell plus fuzz". Directional spread widens as the
+   components shorten, which is how a real wind sea behaves — the long
+   swell arrives ordered, the short stuff comes in from everywhere. */
+function updateComponents() {
+  const A = swell.amp, th = swell.dir, L = swell.len;
+  setComp(0, A,        L,                        th,        0);
+  setComp(1, A * 0.42, Math.max(L * 0.61, 30),   th - 0.28, 5.2);
+  setComp(2, A * 0.22, Math.max(L * 0.36, 20),   th + 0.45, 2.1);
+  setComp(3, A * 0.10, Math.max(L * 0.22, 13),   th - 0.62, 4.4);
+  setComp(4, A * 0.05, 11,                       th + 1.15, 1.3);
+  setComp(5, A * 0.03, 6.5,                      th - 1.42, 3.7);
+  Ux = -Math.sin(th); Uz = -Math.cos(th);
+}
+updateComponents();
+
+/* ---- breakwater registry (transforms feed the shelter model) ---- */
+const breakwaters = []; // { x, z, rot, hl, hw, group }
+
+/* len2d rather than Math.hypot: hypot carries an overflow-safe scaling path
+   that V8 will not inline, and this sits four calls deep inside the per-vertex
+   shelter test — it measured as most of the surface budget on its own. The
+   magnitudes here are harbour metres, nowhere near needing the guard. */
+const len2d = (x, y) => Math.sqrt(x * x + y * y);
+
+/* distance: ray (p + t·r, t≥0) vs segment (a→b), 2D — for penumbra */
+function raySegDist(px, pz, rx, rz, ax, az, bx, bz) {
+  const TMAX = 600;
+  const ex = bx - ax, ez = bz - az;
+  const ux = px - ax, uz = pz - az;
+  const ee = ex * ex + ez * ez;
+  const q = rx * ex + rz * ez;
+  const a1 = rx * ux + rz * uz;
+  const b1 = ex * ux + ez * uz;
+  let best = Infinity;
+  const denom = ee - q * q;
+  if (denom > 1e-9) {
+    const s = (b1 - a1 * q) / denom, t = s * q - a1;
+    if (s >= 0 && s <= 1 && t >= 0 && t <= TMAX) {
+      best = len2d(ux + t * rx - s * ex, uz + t * rz - s * ez);
+    }
+  }
+  let t = clamp(-a1, 0, TMAX);
+  best = Math.min(best, len2d(ux + t * rx, uz + t * rz));           // endpoint a
+  t = clamp(q - a1, 0, TMAX);
+  best = Math.min(best, len2d(ux - ex + t * rx, uz - ez + t * rz)); // endpoint b
+  const s2 = clamp(-b1 / ee, 0, 1);
+  best = Math.min(best, len2d(ux - s2 * ex, uz - s2 * ez));         // ray origin vs segment
+  return best;
+}
+function rayRectDist(px, pz, rx, rz, hl, hw) {
+  let d = raySegDist(px, pz, rx, rz, -hl, -hw,  hl, -hw);
+  d = Math.min(d, raySegDist(px, pz, rx, rz,  hl, -hw,  hl,  hw));
+  d = Math.min(d, raySegDist(px, pz, rx, rz,  hl,  hw, -hl,  hw));
+  d = Math.min(d, raySegDist(px, pz, rx, rz, -hl,  hw, -hl, -hw));
+  return d;
+}
+
+/* Shelter multiplier at (x,z): 1 = open sea, →0.15 deep in the lee.
+   Casts an upwind ray against each breakwater rectangle (2D OBB);
+   umbra decays exponentially behind the structure, with a soft
+   diffraction penumbra at the shadow edges.
+
+   bw.rot is fed straight from bwGroup.rotation.y, so the world→local map has
+   to be the inverse of three's Y-rotation, whose local→world is [c s; -s c]
+   (local +x goes to world (cos, −sin)). The inverse is its transpose,
+   [c −s; s c] — note the minus sits on the FIRST row. Using the forward
+   matrix instead rotates by −rot, which is self-consistent between the point
+   and the ray and so produces a perfectly plausible shadow — just one
+   belonging to a breakwater mirrored about the world axes. That reads as the
+   lee opening on the wrong side of the structure. */
+const SHADOW_LEN = 150, SHELTER_STRENGTH = 0.85, PENUMBRA = 12;
+/* Called once per frame. The breakwater's sin/cos and the upwind vector in
+   its local frame are constant across the whole water grid, and computing
+   them per-vertex costs four transcendentals × 32 000 vertices. */
+function prepShelter() {
+  for (let i = 0; i < breakwaters.length; i++) {
+    const bw = breakwaters[i];
+    bw._c = Math.cos(bw.rot); bw._s = Math.sin(bw.rot);
+    bw._ux = Ux * bw._c - Uz * bw._s;
+    bw._uz = Ux * bw._s + Uz * bw._c;
+    /* Support radii of the footprint rectangle along the upwind direction and
+       across it — the half-width of the shadow band it can cast. These turn
+       the penumbra test into a cheap reject for the vast majority of the grid
+       (see computeShelter). */
+    bw._supU = bw.hl * Math.abs(bw._ux) + bw.hw * Math.abs(bw._uz);
+    bw._supP = bw.hl * Math.abs(bw._uz) + bw.hw * Math.abs(bw._ux);
+  }
+}
+function computeShelter(x, z) {
+  let att = 1;
+  for (let i = 0; i < breakwaters.length; i++) {
+    const bw = breakwaters[i];
+    const dx = x - bw.x, dz = z - bw.z;
+    const c = bw._c, s = bw._s;
+    const lx = dx * c - dz * s, lz = dx * s + dz * c; // world→local (see above)
+    const qx = Math.abs(lx) - bw.hl, qz = Math.abs(lz) - bw.hw;
+    const sd = len2d(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0);
+    if (sd > 320) continue;
+    const ux = bw._ux, uz = bw._uz;                   // upwind dir, local (see prepShelter)
+    let edge = 0, ok = true;
+    let tmin = -1e9, tmax = 1e9;
+    if (Math.abs(ux) < 1e-8) { if (Math.abs(lx) > bw.hl) ok = false; }
+    else { const t1 = (-bw.hl - lx) / ux, t2 = (bw.hl - lx) / ux;
+           tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2)); }
+    if (ok) {
+      if (Math.abs(uz) < 1e-8) { if (Math.abs(lz) > bw.hw) ok = false; }
+      else { const t1 = (-bw.hw - lz) / uz, t2 = (bw.hw - lz) / uz;
+             tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2)); }
+    }
+    if (ok && tmax >= Math.max(tmin, 0)) edge = 1;
+    else {
+      /* Conservative reject before the four segment tests. The ray leaves p
+         along u, so its lateral offset from the footprint's axis never
+         changes: the ray can only come within PENUMBRA of the rectangle if p
+         is inside the shadow band widened by PENUMBRA. And if p sits upwind
+         of the structure the ray only ever recedes, so the closest approach
+         is p itself, which is sd. Both are exact bounds — this prunes the
+         work, it does not approximate the shadow. */
+      const pperp = Math.abs(lz * ux - lx * uz);
+      const palong = lx * ux + lz * uz;
+      if (pperp - bw._supP <= PENUMBRA &&
+          (palong <= bw._supU || sd <= PENUMBRA)) {
+        const d = rayRectDist(lx, lz, ux, uz, bw.hl, bw.hw);
+        if (d < PENUMBRA) edge = 1 - d / PENUMBRA;
+      }
+    }
+    if (edge > 0) att *= 1 - SHELTER_STRENGTH * edge * Math.exp(-Math.max(sd, 0) / SHADOW_LEN);
+  }
+  return att;
+}
+
+/* The single source of truth for the sea surface. Reused per-vertex
+   via the module-scope `_w` object (zero allocation in the hot loop). */
+const _w = { h: 0, sx: 0, sz: 0, att: 1, attEff: 1 };
+/* Shelter susceptibility per component: the long swell stays shadowed,
+   short local chop regenerates behind the structure. att^(1/2^i). */
+const _shelterPow = new Float64Array(NCOMP);
+function shelterFactors(att) {
+  let f = att;
+  for (let i = 0; i < NCOMP; i++) { _shelterPow[i] = f; f = Math.sqrt(f); }
+}
+function waveAt(x, z, t, out) {
+  prepShelter();   // query path: called a handful of times a frame, not 32 000
+  const att = breakwaters.length ? computeShelter(x, z) : 1;
+  shelterFactors(att);
+  let h = 0, sx = 0, sz = 0, aw = 0, asum = 0;
+  for (let i = 0; i < NCOMP; i++) {
+    const c = comps[i];
+    const Ac = c.A * _shelterPow[i];
+    const ph = c.kx * x + c.kz * z - c.w * t + c.phi;
+    const sn = Math.sin(ph), cs = Math.cos(ph);
+    h += Ac * sn;
+    sx += Ac * c.kx * cs;   // ∂h/∂x (analytic — drives normals & buoyancy torque later)
+    sz += Ac * c.kz * cs;   // ∂h/∂z
+    aw += Ac; asum += c.A;
+  }
+  out.h = h; out.sx = sx; out.sz = sz;
+  out.att = att;
+  out.attEff = asum > 1e-6 ? aw / asum : 1;
+}
+
+/* ================================================================
+   SECTION 3 — RENDERER / SCENE / SKY / LIGHTS
+================================================================ */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: el('scene'), antialias: true });
+} catch (e) {
+  el('loaderMsg').textContent = 'WebGL unavailable in this browser.';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.62;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+
+const scene = new THREE.Scene();
+/* Fog is pulled in from (500, 2600) so the far end of the basin actually
+   dissolves instead of staying razor-sharp out to the sky dome: the far
+   plane now lands well inside the water sheet (x ∈ [-400,400], z ∈
+   [-460,60]) rather than beyond it. The colour is lifted toward the hazy
+   horizon of the Sky shader so the fade reads as aerial perspective and not
+   as a grey wash over the sea. */
+scene.fog = new THREE.Fog(0xb4c6cf, 420, 1750);
+
+/* Every piece of harbour geometry hangs off `world`; sky, lights and the
+   environment probe stay on `scene`. The world is kept at 1:1 — framing is
+   solved on the CAMERA instead (see SECTION 13: fitCamera), by dollying and
+   panning a fixed orientation until the quay and breakwater land inside the
+   usable band with margin. `worldInv` is the inverse matrix — pointer picking
+   casts through it to convert screen rays into harbour coords. */
+const world = new THREE.Group();
+scene.add(world);
+const worldInv = new THREE.Matrix4();
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1, 6000);
+camera.position.set(-320, 195, -390); // intro start, eases to home
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(10, 0, -20);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 40;
+controls.maxDistance = 760;
+controls.maxPolarAngle = 1.45;
+controls.minPolarAngle = 0.12;
+/* Once the user orbits, the solved home pose stops being re-applied on
+   resize — their framing wins over ours. */
+let userMovedCam = false;
+controls.addEventListener('start', () => { userMovedCam = true; });
+
+// --- sky + sun + image-based environment ---
+const sun = new THREE.Vector3();
+{
+  const phi = THREE.MathUtils.degToRad(90 - 26);
+  const theta = THREE.MathUtils.degToRad(168);
+  sun.setFromSphericalCoords(1, phi, theta);
+}
+const sky = new Sky();
+sky.scale.setScalar(4000);
+sky.material.uniforms.turbidity.value = 6;
+sky.material.uniforms.rayleigh.value = 1.4;
+sky.material.uniforms.mieCoefficient.value = 0.004;
+sky.material.uniforms.mieDirectionalG.value = 0.8;
+sky.material.uniforms.sunPosition.value.copy(sun);
+scene.add(sky);
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(scene).texture; // sky only in scene so far
+  pmrem.dispose();
+}
+const sunLight = new THREE.DirectionalLight(0xfff2dd, 2.1);
+sunLight.position.copy(sun).multiplyScalar(420);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.left = -280; sunLight.shadow.camera.right = 280;
+sunLight.shadow.camera.top = 280;   sunLight.shadow.camera.bottom = -280;
+sunLight.shadow.camera.near = 10;   sunLight.shadow.camera.far = 1000;
+sunLight.shadow.bias = -0.0004;
+sunLight.shadow.normalBias = 1.2;
+scene.add(sunLight, sunLight.target);
+scene.add(new THREE.HemisphereLight(0xbfd6e4, 0x2b3a33, 0.45));
+
+/* ================================================================
+   SECTION 4 — WATER MESH  (Gerstner surface solved on the CPU)
+================================================================ */
+/* Denser than the sine version's 224 × 144 — the solve came out roughly twice
+   as cheap (typed-array components, a pruned penumbra test, no Math.hypot),
+   and quads are the only place that saving is worth spending: at 2.8 m the
+   crest line stops showing its own tessellation and the foam mask has
+   somewhere to be ragged. */
+const WATER_W = 800, WATER_D = 520, SEG_X = 288, SEG_Z = 184;
+const waterGeo = new THREE.PlaneGeometry(WATER_W, WATER_D, SEG_X, SEG_Z);
+waterGeo.rotateX(-Math.PI / 2);
+waterGeo.translate(0, 0, -200); // x ∈ [-400,400], z ∈ [-460,60]
+const vCount = waterGeo.attributes.position.count;
+waterGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(vCount * 3), 3));
+waterGeo.attributes.position.setUsage(THREE.DynamicDrawUsage);
+waterGeo.attributes.normal.setUsage(THREE.DynamicDrawUsage);
+waterGeo.attributes.color.setUsage(THREE.DynamicDrawUsage);
+
+/* The lattice is kept in its own arrays. The trochoid displaces x and z as
+   well as y, so `position` can no longer double as the input domain — writing
+   displaced coordinates back into the buffer the next frame reads from is what
+   makes a Gerstner grid drift downwind and slowly shear itself apart. */
+const COLS = SEG_X + 1, ROWS = SEG_Z + 1;
+const latX = new Float64Array(vCount), latZ = new Float64Array(vCount);
+{
+  const pa = waterGeo.attributes.position.array;
+  for (let i = 0; i < vCount; i++) { latX[i] = pa[i * 3]; latZ[i] = pa[i * 3 + 2]; }
+}
+const DX_STEP = WATER_W / SEG_X;   // regular column spacing — drives the recurrence
+
+/* Foam memory, one scalar per vertex. Foam is entrained air: it does not
+   vanish the instant a crest stops folding, it takes seconds to surface and
+   burst. So the crest mask needs a cross-frame accumulator. */
+const foamMem = new Float32Array(vCount);
+
+/* ---- water shading (no custom shader) ----------------------------------
+   MeshStandardMaterial with a white base colour, so the vertex colour IS the
+   albedo — vertex colours are consumed raw in the linear working space, which
+   is the space the values below are written in.
+
+   What the albedo has to carry, since there is no fragment shader to do it:
+     · a depth ramp from harbour green to offshore blue-black;
+     · lee turbidity — sheltered water does not mix, so it silts up green;
+     · Beer–Lambert down the wave, which is what makes a swell read as
+       volume rather than as a shaded sheet;
+     · gust mottling. A patch the wind is working on scatters the bright
+       horizon sky into a flat sheen; the glassy water between patches
+       mirrors the much darker sky overhead. That inversion — smooth water
+       reading DARKER than rough water — is most of what looks like
+       "texture" on real water, and with a single fixed roughness the only
+       place left to put it is the albedo;
+     · foam, broken up by noise so the edge is ragged rather than a smooth
+       gradient along the crest line.
+   Sub-quad ripple slopes go into the vertex normals instead, so the sun
+   track is real specular off real tilt. Sky, fog and shadows still come
+   from the standard pipeline.                                            */
+const waterMat = new THREE.MeshStandardMaterial({
+  color: 0xffffff, vertexColors: true, roughness: 0.075, metalness: 0.0,
+  envMapIntensity: 1.35
+});
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.receiveShadow = true;
+water.frustumCulled = false;
+world.add(water);
+
+/* distant flat "ocean skirt" out to the horizon — flat, unsheltered,
+   foam-free stand-in water. Its colour is the deep body value above,
+   expressed in sRGB because a Color from hex gets converted for us. */
+const skirt = new THREE.Mesh(
+  new THREE.PlaneGeometry(5000, 5000),
+  new THREE.MeshStandardMaterial({ color: 0x123138, roughness: 0.10, metalness: 0.0, envMapIntensity: 1.2 })
+);
+skirt.rotation.x = -Math.PI / 2;
+skirt.position.y = -6.5; // below the deepest possible storm trough
+world.add(skirt);
+
+/* ---- value noise -------------------------------------------------------
+   The same hash/interpolation the reference frame's mottling and foam were
+   built on. vnoised() carries its own analytic derivative, quintic rather
+   than cubic: a cubic's second derivative jumps at the lattice lines and
+   that shows up as a faint grid in specular. */
+/* An integer bit-mix on the lattice cell, not the shader's fract() chain.
+   The GLSL hash spends four fract() per corner, and fract() is a Math.floor
+   here — sixteen of them per noise sample, times five fields, times 32 000
+   vertices. Integer mixing gives the same white noise for a fraction of the
+   cost; only the arbitrary constants differ, which nothing downstream cares
+   about. `+ 0x8000` keeps the cell indices positive across the whole domain
+   so the shifts stay in the well-defined range. */
+function hash21(ix, iy) {
+  let h = Math.imul(ix + 0x8000, 374761393) + Math.imul(iy + 0x8000, 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) * 2.3283064365386963e-10;   // / 2^32
+}
+function vnoise(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  const a = hash21(ix, iy),     b = hash21(ix + 1, iy);
+  const c = hash21(ix, iy + 1), d = hash21(ix + 1, iy + 1);
+  return lerp(lerp(a, b, ux), lerp(c, d, ux), uy);
+}
+const _nd = { v: 0, dx: 0, dy: 0 };
+function vnoised(x, y, out) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const ux = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
+  const uy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+  const dux = 30 * fx * fx * (fx * (fx - 2) + 1);
+  const duy = 30 * fy * fy * (fy * (fy - 2) + 1);
+  const a = hash21(ix, iy),     b = hash21(ix + 1, iy);
+  const c = hash21(ix, iy + 1), d = hash21(ix + 1, iy + 1);
+  const k1 = b - a, k2 = c - a, k3 = a - b - c + d;
+  out.v  = a + k1 * ux + k2 * uy + k3 * ux * uy;
+  out.dx = dux * (k1 + k3 * uy);
+  out.dy = duy * (k2 + k3 * ux);
+}
+
+/* ---- the render surface ------------------------------------------------
+   Same components, same phases as waveAt() — but each one now also drags the
+   surface particle horizontally against its travel direction, by Q·A·cos(φ).
+   That single term is the difference between a sine hump and a wave: mass
+   piles up under the crest, so peaks pinch and troughs go long and flat.
+
+   Steepness Q is normalised by k·A so the sharpest sea state sits just short
+   of the k·A = 1 cusp where a trochoid self-intersects, and is tapered to
+   zero at the quay (z→60) so the displaced sheet can never push through the
+   wall it is supposed to slap against.
+
+   Normals come from the surface Jacobian, not from ∂h/∂x — with lateral
+   displacement in play those are no longer the same thing, and using the
+   flat-domain gradient is what makes most Gerstner water look soft.
+   det(∂P/∂(x,z)) < 1 means the sheet is folding onto itself: that is the
+   physical whitecap criterion, and it is what drives foam below.
+
+   Cost is the reason the phase is walked rather than evaluated. Six trains
+   over 32 000 vertices is 400 000 sin/cos pairs a frame; along a row of
+   constant z the phase of every component advances by a FIXED step, so an
+   angle-addition recurrence replaces the whole lot with four multiplies —
+   seeded once per row per component, in float64, where 225 steps of drift is
+   far below what the surface can show. */
+const GERSTNER_Q = 0.86;
+const _sn = new Float64Array(NCOMP), _cs = new Float64Array(NCOMP);
+const _dsn = new Float64Array(NCOMP), _dcs = new Float64Array(NCOMP);
+const _cA = new Float64Array(NCOMP), _cK = new Float64Array(NCOMP);
+const _cDx = new Float64Array(NCOMP), _cDz = new Float64Array(NCOMP);
+const _cKx = new Float64Array(NCOMP), _cKz = new Float64Array(NCOMP);
+const _cDxKx = new Float64Array(NCOMP), _cDxKz = new Float64Array(NCOMP);
+const _cDzKx = new Float64Array(NCOMP), _cDzKz = new Float64Array(NCOMP);
+const TAU = Math.PI * 2;
+
+/* Beer–Lambert extinction, tabulated over `above` ∈ [−1, 1] — see the colour
+   block in the loop. Rebuilt whenever the amplitude moves, which the eased
+   sliders make almost every frame, but 64 entries is nothing. */
+const EXT_N = 65;
+const extR = new Float32Array(EXT_N), extG = new Float32Array(EXT_N), extB = new Float32Array(EXT_N);
+let extAmp = -1;
+function buildExtLUT(ampRef) {
+  if (Math.abs(ampRef - extAmp) < 1e-4) return;
+  extAmp = ampRef;
+  for (let i = 0; i < EXT_N; i++) {
+    const above = (i / (EXT_N - 1)) * 2 - 1;
+    const path = (1 - above) * ampRef * 1.15;
+    extR[i] = Math.exp(-0.62 * path);
+    extG[i] = Math.exp(-0.16 * path);
+    extB[i] = Math.exp(-0.11 * path);
+  }
+}
+
+let foamRef = 1, whiteCap = 0;
+let ampInv = 1, _rt0 = 0, _rt1 = 0;
+const _camW = new THREE.Vector3();         // camera in harbour coords
+
+function updateWater(dt) {
+  const pa = waterGeo.attributes.position.array;
+  const na = waterGeo.attributes.normal.array;
+  const ca = waterGeo.attributes.color.array;
+
+  foamRef = Math.max(swell.amp * 1.15, 0.35);
+  /* Whitecaps are not a property of a crest but of the sea state: water only
+     breaks once it is both big enough and steep enough (H/L past roughly
+     1/50). Without this gate a 0.4 m calm foams as hard as a storm, because
+     the crest mask is normalised by amplitude. */
+  whiteCap = clamp((swell.amp - 0.45) / 1.05, 0, 1)
+           * clamp((2 * swell.amp / swell.len - 0.014) / 0.022, 0, 1);
+  const foamDecay = Math.exp(-1.35 * Math.min(dt, 0.1)) * 0.92;   // ~2 s residue
+  prepShelter();
+
+  const ampRef = Math.max(swell.amp, 0.25);
+  ampInv = 1 / ampRef;
+  buildExtLUT(ampRef);
+
+  // ripple + gust drift, along the swell heading
+  const drX = Math.sin(swell.dir), drZ = Math.cos(swell.dir);
+  _rt0 = simT * 0.9; _rt1 = simT * 1.6;   // per-octave ripple drift
+  /* A third of the per-pixel figure the shader version used. There the tilt
+     lived inside one pixel and read as glitter; interpolated across a 3.5 m
+     quad the same slope becomes a broad facet turned at the bright horizon
+     sky, and the whole sheet goes pale and satin. */
+  const rippleGain = (0.60 + 0.70 * clamp(swell.amp / 1.6, 0, 1.4)) * 0.34;
+
+  /* Camera-facing terms (backlit crests) need the eye in harbour space, and
+     the world group is at 1:1 with a translation at most — one inverse. */
+  _camW.copy(camera.position).applyMatrix4(worldInv);
+  const sunX = sun.x, sunY = sun.y, sunZ = sun.z;
+
+  /* Flatten the component objects into typed arrays for the duration of the
+     sweep, and pre-multiply everything the inner loop would otherwise redo
+     196 000 times. Reading six properties off a JS object per component per
+     vertex was costing more than the trigonometry it fed. Also the phase step
+     across one column, which is what the recurrence advances by. */
+  for (let c = 0; c < NCOMP; c++) {
+    const cc = comps[c];
+    _cA[c] = cc.A; _cK[c] = cc.k;
+    _cDx[c] = cc.dx; _cDz[c] = cc.dz;
+    _cKx[c] = cc.kx; _cKz[c] = cc.kz;
+    _cDxKx[c] = cc.dx * cc.kx; _cDxKz[c] = cc.dx * cc.kz;
+    _cDzKx[c] = cc.dz * cc.kx; _cDzKz[c] = cc.dz * cc.kz;
+    const d = cc.kx * DX_STEP;
+    _dsn[c] = Math.sin(d); _dcs[c] = Math.cos(d);
+  }
+
+  for (let iz = 0; iz < ROWS; iz++) {
+    const row = iz * COLS;
+    const z = latZ[row];
+    const x0 = latX[row];
+    // seed the recurrence at column 0 of this row
+    for (let c = 0; c < NCOMP; c++) {
+      const cc = comps[c];
+      const ph = (cc.kx * x0 + cc.kz * z - cc.w * simT + cc.phi) % TAU;
+      _sn[c] = Math.sin(ph); _cs[c] = Math.cos(ph);
+    }
+    // steepness fades at the quay: the same taper for the whole row
+    const zTaper = 1 - smoothstep(34, 58, z);
+    const shallowness = smoothstep(-160, 55, z);
+    const shoreBand = smoothstep(53, 59.6, z);
+
+    for (let ix = 0; ix < COLS; ix++) {
+      const i = row + ix;
+      const p3 = i * 3;
+      const x = latX[i];
+
+      const att = breakwaters.length ? computeShelter(x, z) : 1;
+      const qTaper = GERSTNER_Q * (0.35 + 0.65 * att) * zTaper;
+
+      let dispX = 0, dispZ = 0, h = 0;
+      let jxx = 1, jxz = 0, jzx = 0, jzz = 1, hx = 0, hz = 0;
+      let f = att;
+      for (let c = 0; c < NCOMP; c++) {
+        const Ac = _cA[c] * f;
+        f = Math.sqrt(f);
+        const sn = _sn[c], cs = _cs[c];
+        // advance this component's phase one column for the next vertex
+        _sn[c] = sn * _dcs[c] + cs * _dsn[c];
+        _cs[c] = cs * _dcs[c] - sn * _dsn[c];
+        if (Ac <= 1e-6) continue;
+        const kA = _cK[c] * Ac;
+        // per-component steepness, capped so no single train cusps on its own
+        const qn = qTaper / (kA * NCOMP), qc = 1 / (kA > 1e-4 ? kA : 1e-4);
+        const QA = (qn < qc ? qn : qc) * Ac;
+        h += Ac * sn;
+        dispX += QA * _cDx[c] * cs;
+        dispZ += QA * _cDz[c] * cs;
+        const sq = QA * sn;
+        jxx -= sq * _cDxKx[c];  jxz -= sq * _cDxKz[c];
+        jzx -= sq * _cDzKx[c];  jzz -= sq * _cDzKz[c];
+        hx  += Ac * _cKx[c] * cs;
+        hz  += Ac * _cKz[c] * cs;
+      }
+
+      const wx = x + dispX, wz = z + dispZ;
+      pa[p3] = wx; pa[p3 + 1] = h; pa[p3 + 2] = wz;
+
+      // tangents along the x- and z-parameter lines, normal = Tz × Tx
+      const nx0 = jzz * hx - jzx * hz;
+      const ny0 = jxx * jzz - jxz * jzx;   // = Jacobian determinant
+      const nz0 = jxx * hz - jxz * hx;
+
+      /* ---- foam: fold criterion, then memory ----
+         · fold  — the determinant under 1 means the trochoid is pinching
+                   into a cusp. This is where water actually breaks.
+         · crest — high water still gets spray even when it is not folding. */
+      let foam = (1 - ny0) * 2.3 - 0.55;
+      foam = Math.max(foam, (h / foamRef - 0.70) * 1.6);
+      foam = clamp(foam, 0, 1);
+      const mem = Math.max(foam, foamMem[i] * foamDecay);
+      foamMem[i] = mem;
+
+      /* ---- gust field: cat's paws ----
+         Wind arrives in gusts, so chop is not spread evenly — it comes in
+         patches metres to tens of metres across with near-glassy water
+         between them. One field drives both the ripple amplitude and the
+         mottling, because on real water they are the same thing. */
+      const gt = simT * 0.35;
+      const gust = 0.30 + 1.25 * vnoise(x * 0.021 - drX * gt, z * 0.021 - drZ * gt);
+      const gustN = clamp(gust, 0, 1);
+
+      /* ---- sub-quad ripple slopes ----
+         Two octaves of isotropic gradient noise, drifting on their own
+         headings so they do not beat in step. Sinusoids would be wrong here
+         and wrong legibly: they are infinitely coherent, so their crest lines
+         run unbroken across the whole sea and read as corduroy. The spectrum
+         stops at ~14 m because that is what the 3.5 m lattice can carry —
+         a finer octave does not become glitter, it becomes crawling fizz as
+         the vertices sample it at random phase. */
+      const rippleAmp = lerp(0.30, 1.0, att) * rippleGain * gust;
+      vnoised(x * 0.18 + drX * _rt0, z * 0.18 + drZ * _rt0, _nd);
+      let gx = _nd.dx * 0.105, gz = _nd.dy * 0.105;
+      vnoised(x * 0.4356 + drX * _rt1 + 17.3, z * 0.4356 + drZ * _rt1 + 17.3, _nd);
+      gx += _nd.dx * 0.0977; gz += _nd.dy * 0.0977;
+      let nx = nx0 - gx * rippleAmp * (1 - 0.7 * mem);
+      let nz = nz0 - gz * rippleAmp * (1 - 0.7 * mem);
+      const ny = Math.abs(ny0);
+      const inv = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
+      na[p3] = -nx * inv; na[p3 + 1] = ny * inv; na[p3 + 2] = -nz * inv;
+
+      /* ---- body colour ----
+         Open ocean is much darker and much less blue than it looks in a
+         photograph — most of the blue in a real frame is reflected sky,
+         which the env probe is already supplying. Making the body itself
+         blue double-counts it, and that is what reads as "swimming pool".
+         Deep water here is near-black with a teal bias. */
+      let r = lerp(0.005, 0.019, shallowness);
+      let g = lerp(0.026, 0.077, shallowness);
+      let b = lerp(0.034, 0.079, shallowness);
+      // sheltered water: no mixing, so it silts up green and loses depth
+      const lee = (1 - att) * 0.85;
+      r = lerp(r, 0.034, lee); g = lerp(g, 0.098, lee); b = lerp(b, 0.086, lee);
+
+      /* Beer–Lambert down the wave, not down the seabed. A trough has several
+         extra metres of water between the eye and whatever is scattering
+         light back, and the red end is gone first — so the hollows go
+         blue-black while the crests keep some green. */
+      const above = clamp(h * ampInv, -1, 1);
+      /* One table lookup instead of three exp() per vertex. `above` is bounded
+         to [−1, 1] and the extinction only depends on it, so the whole curve
+         is tabulated once a frame (see extLUT) — 32 000 vertices × 3 exp()
+         was measurable, 64 entries × 3 is not. */
+      const li = ((above + 1) * 0.5 * (EXT_N - 1) + 0.5) | 0;
+      r *= extR[li]; g *= extG[li]; b *= extB[li];
+
+      // gust mottling: glassy patches mirror the dark sky overhead, working
+      // patches scatter the bright horizon into a flat sheen
+      const gm = lerp(0.45, 1.25, gustN);
+      r = r * gm + 0.0035 * gustN;
+      g = g * gm + 0.0095 * gustN;
+      b = b * gm + 0.0125 * gustN;
+
+      /* ---- backlit crests ----
+         A crest thin enough to transmit light glows from inside when the sun
+         is behind it — strongest exactly where the face is steep. */
+      let vx = _camW.x - wx, vy = _camW.y - h, vz = _camW.z - wz;
+      const vl = 1 / Math.max(Math.sqrt(vx * vx + vy * vy + vz * vz), 1e-4);
+      vx *= vl; vy *= vl; vz *= vl;
+      const towardSun = clamp(-(vx * sunX + vy * sunY + vz * sunZ) * 0.5 + 0.5, 0, 1);
+      // x^2.5 and x^1.5 rather than the shader's 2.2 and 1.5 exponents: two
+      // sqrt beat two pow by enough to matter here, and the curves are within
+      // a couple of percent of each other over [0,1]
+      const ts = Math.sqrt(towardSun);
+      const backlit = towardSun * towardSun * ts;
+      const tn = 1 - Math.abs(ny * inv);
+      const thin = tn * Math.sqrt(tn);
+      const crest = smoothstep(0.15, 1.0, above);
+      const sss = crest * backlit * (0.35 + 1.4 * thin) * 0.55;
+      r += 0.05 * sss; g += 0.24 * sss; b += 0.21 * sss;
+
+      /* ---- foam ----
+         The crest mask is a PROBABILITY of foam, not a coverage value: two
+         scales of drifting noise tear it into clumps so the edge is ragged
+         instead of a smooth gradient along the crest line. Most of the sea
+         is not foaming, so this is only paid for where a crest or the quay
+         surf could actually put white on the water. */
+      const seed = mem * whiteCap;
+      let wFoam = 0;
+      if (seed > 0.02 || z > 50) {
+        /* 10 m and 3.5 m clumps. The shader ran this at 2.4 m and 0.54 m,
+           which is right for a fragment and useless for a vertex: below the
+           quad size each vertex samples the field at an unrelated phase, and
+           what should be a torn edge interpolates into smooth grey lobes. */
+        const fn = vnoise(wx * 0.10 + simT * 0.22, wz * 0.10 - simT * 0.13)
+                 + 0.62 * vnoise(wx * 0.285 - simT * 0.31, wz * 0.285 - simT * 0.17);
+        /* A tighter knee than the shader's (0.34, 1.02). Vertex colours are
+           interpolated across a quad, which is already a blur the fragment
+           version never had — matching its gradient on top of that gives grey
+           smears instead of whitecaps. */
+        wFoam = smoothstep(0.30, 0.78, seed * 1.45 + fn * 0.5 - 0.34);
+        // surf against the quay wall — breaks at any sea state, but only
+        // where the water is actually running up the wall
+        const shoreline = shoreBand * smoothstep(0.15, 0.70, h * ampInv) * att * 0.55;
+        wFoam = clamp(Math.max(wFoam, shoreline * (0.45 + 0.55 * fn)), 0, 1);
+      }
+      ca[p3]     = lerp(r, 0.74, wFoam);
+      ca[p3 + 1] = lerp(g, 0.81, wFoam);
+      ca[p3 + 2] = lerp(b, 0.83, wFoam);
+    }
+  }
+  waterGeo.attributes.position.needsUpdate = true;
+  waterGeo.attributes.normal.needsUpdate = true;
+  waterGeo.attributes.color.needsUpdate = true;
+}
+
+/* ================================================================
+   SECTION 5 — QUAY, PORT PROPS
+================================================================ */
+const concrete = new THREE.MeshStandardMaterial({ color: 0x8d9299, roughness: 0.9 });
+const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.6, metalness: 0.4 });
+
+function box(w, h, d, mat, x, y, z, cast = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = cast; m.receiveShadow = true;
+  world.add(m);
+  return m;
+}
+
+/* The quay is a bounded structure: both ends must read on screen, so it
+   spans QUAY_HL either side of origin rather than the full water width.
+   Natural shoreline fills x beyond it, plugging the water/land seam.   */
+const QUAY_HL = 190, QUAY_LEN = QUAY_HL * 2;
+{ // quay slab (front face at z = 60, top at y = 2.2)
+  box(QUAY_LEN, 6.4, 180, concrete, 0, -1.0, 150);
+  box(QUAY_LEN, 6.4, 0.6, new THREE.MeshStandardMaterial({ color: 0x6d7278, roughness: 0.95 }), 0, -1.0, 59.8);
+  box(QUAY_LEN, 1.6, 0.15, new THREE.MeshStandardMaterial({ color: 0x3d4a4d, roughness: 1 }), 0, -0.4, 59.45, false);
+  box(QUAY_LEN, 0.35, 0.8, new THREE.MeshStandardMaterial({ color: 0x7a8087, roughness: 0.9 }), 0, 2.375, 60.6, false);
+  box(QUAY_LEN, 0.04, 0.9, new THREE.MeshStandardMaterial({ color: 0xc7a83c, roughness: 0.8 }), 0, 2.22, 62.2, false);
+
+  // shoreline either side of the quay — keeps the basin sealed past its ends
+  const shoreMat = new THREE.MeshStandardMaterial({ color: 0x55604f, roughness: 1 });
+  const revetMat = new THREE.MeshStandardMaterial({ color: 0x4f5450, roughness: 1 });
+  const SHORE_W = 420 - QUAY_HL;   // overruns the water edge so no seam shows
+  for (const side of [-1, 1]) {
+    const cx = side * (QUAY_HL + SHORE_W / 2);
+    box(SHORE_W, 6.4, 180, shoreMat, cx, -1.4, 150, false);
+    box(SHORE_W, 6.4, 0.6, revetMat, cx, -1.4, 59.8, false);
+  }
+}
+// bollards + tire fenders
+const tireMat = new THREE.MeshStandardMaterial({ color: 0x17181a, roughness: 0.95 });
+for (let x = -160; x <= 160; x += 40) {
+  const b = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 0.9, 12), darkMetal);
+  post.position.y = 0.45;
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.5, 0.3, 12), darkMetal);
+  cap.position.y = 0.95;
+  b.add(post, cap);
+  b.position.set(x, 2.2, 61.6);
+  b.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+  world.add(b);
+}
+for (let x = -178; x <= 178; x += 26) {
+  const f = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.32, 10, 20), tireMat);
+  f.position.set(x, 0.55, 59.35);
+  f.castShadow = true;
+  world.add(f);
+}
+// lamp posts
+for (const x of [-150, -60, 60, 150]) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 8, 8), darkMetal);
+  pole.position.y = 4;
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.6), darkMetal);
+  arm.position.set(0, 7.9, -0.7);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.9),
+    new THREE.MeshStandardMaterial({ color: 0x333a40, emissive: 0xfff3c4, emissiveIntensity: 0.18 }));
+  head.position.set(0, 7.85, -1.4);
+  g.add(pole, arm, head);
+  g.position.set(x, 2.2, 64.5);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  world.add(g);
+}
+// harbour office
+{
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(34, 8, 14),
+    new THREE.MeshStandardMaterial({ color: 0xdde2e6, roughness: 0.85 }));
+  body.position.y = 4;
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(34.3, 2.2, 14.3),
+    new THREE.MeshStandardMaterial({ color: 0x1d2b33, roughness: 0.2, metalness: 0.6 }));
+  glass.position.y = 5.4;
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(36, 0.5, 16),
+    new THREE.MeshStandardMaterial({ color: 0x596066, roughness: 0.9 }));
+  roof.position.y = 8.2;
+  g.add(body, glass, roof);
+  g.position.set(-158, 2.2, 112);
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  world.add(g);
+}
+// container stacks
+{
+  const colors = [0xb5482f, 0x2f5f8f, 0x3f7a4e, 0xc96a26, 0x707880];
+  const spots = [[-118, 96, 0, 2], [-104, 96, 0, 1], [-118, 101, 0, 1], [-40, 104, 1, 2], [-40, 112, 1, 1],
+                 [-24, 104, 1, 3], [22, 118, 0, 2], [36, 118, 0, 1], [-70, 122, 1, 1]];
+  spots.forEach(([x, z, r, lv], i) => {
+    for (let l = 0; l < lv; l++) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(12, 2.6, 2.6),
+        new THREE.MeshStandardMaterial({ color: colors[(i + l) % colors.length], roughness: 0.75, metalness: 0.15 }));
+      m.position.set(x, 2.2 + 1.3 + l * 2.62, z);
+      m.rotation.y = r ? Math.PI / 2 : 0;
+      m.castShadow = m.receiveShadow = true;
+      world.add(m);
+    }
+  });
+}
+/* Container-handling forklift, mid-move with a 20 ft box on the forks. It
+   sits between the stacks and the crane to give that stretch of quay a sense
+   of scale and activity: a 4 m machine reads as a machine, not a crate. Built
+   facing +x, then rotated into place.                                     */
+{
+  const yelMat = new THREE.MeshStandardMaterial({ color: 0xd8a01e, roughness: 0.62, metalness: 0.28 });
+  const tyreMat = new THREE.MeshStandardMaterial({ color: 0x17181a, roughness: 0.95 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x1d2b33, roughness: 0.2, metalness: 0.6 });
+  const g = new THREE.Group();
+  const part = (w, h, d, mat, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+
+  // wheels — front pair carries the load, so it is the wider, larger one
+  [[2.3, 1.0, 1.75], [2.3, 1.0, -1.75], [-2.9, 0.8, 1.5], [-2.9, 0.8, -1.5]].forEach(([x, r, z]) => {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.7, 12), tyreMat);
+    w.rotation.x = Math.PI / 2;
+    w.position.set(x, r, z);
+    g.add(w);
+  });
+
+  part(7.0, 1.7, 3.4, yelMat, -0.5, 1.75, 0);          // chassis
+  part(1.9, 2.2, 3.2, darkMetal, -3.7, 1.9, 0);        // counterweight
+  part(2.5, 2.3, 2.8, yelMat, -1.3, 3.75, 0);          // cab shell
+  part(2.6, 1.1, 2.9, glassMat, -1.3, 4.15, 0);        // glazing band
+  part(2.8, 0.2, 3.0, darkMetal, -1.3, 4.95, 0);       // cab roof
+
+  // mast: two rails, a head beam, and the tilt rams back to the chassis
+  const LIFT = 4.2;                                     // carriage height
+  for (const z of [-1.2, 1.2]) {
+    part(0.4, 7.6, 0.4, yelMat, 2.7, 3.9, z);
+    const ram = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 3.0, 8), darkMetal);
+    ram.rotation.z = Math.PI / 2.6;
+    ram.position.set(1.3, 2.6, z);
+    g.add(ram);
+  }
+  part(0.5, 0.4, 3.2, darkMetal, 2.7, 7.5, 0);         // head beam
+  part(0.35, 1.7, 3.3, darkMetal, 3.1, LIFT, 0);       // carriage
+  for (const z of [-1.0, 1.0])                          // forks
+    part(2.6, 0.2, 0.4, darkMetal, 4.5, LIFT - 0.85, z);
+
+  // the load: a 20 ft box, long axis across the machine as it is carried
+  const load = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 6.1),
+    new THREE.MeshStandardMaterial({ color: 0x2f7f86, roughness: 0.75, metalness: 0.15 }));
+  load.position.set(4.5, LIFT - 0.75 + 1.3, 0);
+  g.add(load);
+
+  g.position.set(74, 2.2, 92);
+  g.rotation.y = Math.PI * 0.86;
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  world.add(g);
+}
+// portal crane silhouette
+{
+  const yel = new THREE.MeshStandardMaterial({ color: 0xc99425, roughness: 0.6, metalness: 0.3 });
+  const g = new THREE.Group();
+  [[-8, -5], [8, -5], [-8, 5], [8, 5]].forEach(([x, z]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(1.4, 12, 1.4), yel);
+    leg.position.set(x, 6, z); g.add(leg);
+  });
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(22, 2, 2.4), yel);
+  beam.position.y = 13;
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3), darkMetal);
+  cab.position.set(6, 11, 0);
+  g.add(beam, cab);
+  g.position.set(140, 2.2, 100);
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  world.add(g);
+}
+// distant port silhouettes + backland
+{
+  const land = new THREE.Mesh(new THREE.PlaneGeometry(2600, 1200),
+    new THREE.MeshStandardMaterial({ color: 0x4c5548, roughness: 1 }));
+  land.rotation.x = -Math.PI / 2;
+  land.position.set(0, 1.9, 840);
+  world.add(land);
+  const shedMat = new THREE.MeshStandardMaterial({ color: 0x3a4149, roughness: 1 });
+  [[-260, 330, 120, 18], [-60, 360, 160, 24], [180, 340, 100, 15], [360, 380, 140, 20]].forEach(([x, z, w, h]) => {
+    box(w, h, 30, shedMat, x, 1.9 + h / 2, z, false);
+  });
+}
+
+/* ================================================================
+   SECTION 6 — BREAKWATER (draggable 3D model)
+================================================================ */
+const BW_LEN = 110, BW_BASE = 18, BW_TOP = 10, BW_H = 9;
+const bwGroup = new THREE.Group();
+const bwMats = [];
+{
+  /* ---- rubble mound: a solid core, armoured with individual rocks ----
+     Seeded PRNG so the structure is byte-identical every reload.
+     Rocks are generated as jittered polyhedra, transformed into place,
+     then merged per tone class → 4 draw calls instead of ~300.        */
+  let _seed = 0x9e3779b9;
+  const rnd = () => {           // mulberry32
+    _seed |= 0; _seed = _seed + 0x6d2b79f5 | 0;
+    let t = Math.imul(_seed ^ _seed >>> 15, 1 | _seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  const rr = (a, b) => a + (b - a) * rnd();
+
+  // hidden core, inset so armour never reveals a gap through the mound
+  const cs = new THREE.Shape(); // trapezoidal rubble-mound cross-section
+  const CB = BW_BASE / 2 - 1.6, CT = BW_TOP / 2 - 0.6, CH = BW_H - 0.7;
+  cs.moveTo(-CB, 0); cs.lineTo(CB, 0);
+  cs.lineTo(CT, CH); cs.lineTo(-CT, CH); cs.closePath();
+  const coreGeo = new THREE.ExtrudeGeometry(cs, { depth: BW_LEN - 5, bevelEnabled: false });
+  coreGeo.translate(0, 0, -(BW_LEN - 5) / 2);
+  coreGeo.rotateY(Math.PI / 2); // length along local +x
+  const core = new THREE.Mesh(coreGeo, new THREE.MeshStandardMaterial({
+    color: 0x4a4f52, roughness: 1, flatShading: true
+  }));
+
+  /* one irregular rock: an icosahedron with its shared vertices pushed
+     around (indexed, so faces stay welded), then flat-shaded */
+  function rockGeo(rough) {
+    const g = new THREE.IcosahedronGeometry(1, rnd() < 0.3 ? 1 : 0);
+    const p = g.attributes.position;
+    const seen = new Map();
+    for (let i = 0; i < p.count; i++) {
+      const key = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
+      let d = seen.get(key);
+      if (!d) { d = [rr(-rough, rough), rr(-rough, rough), rr(-rough, rough)]; seen.set(key, d); }
+      p.setXYZ(i, p.getX(i) + d[0], p.getY(i) + d[1], p.getZ(i) + d[2]);
+    }
+    return g.toNonIndexed();
+  }
+
+  // cross-section outline the armour hugs: (±BW_BASE/2, 0) → (±BW_TOP/2, BW_H)
+  const HB = BW_BASE / 2, HT = BW_TOP / 2;
+  const buckets = [[], [], []];      // grouped by tone class
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
+  const _pos = new THREE.Vector3(), _scl = new THREE.Vector3();
+
+  function place(x, y, z, size, flat, tone) {
+    const g = rockGeo(rr(0.16, 0.34));
+    _e.set(rr(0, 6.283), rr(0, 6.283), rr(0, 6.283));
+    _q.setFromEuler(_e);
+    _pos.set(x, y, z);
+    _scl.set(size * rr(0.85, 1.35), size * (flat ? rr(0.5, 0.8) : rr(0.8, 1.15)), size * rr(0.85, 1.35));
+    g.applyMatrix4(_m.compose(_pos, _q, _scl));
+    buckets[tone].push(g);
+  }
+
+  // --- primary armour on both slopes: rows from the toe up to the crown ---
+  const ROWS = 6;
+  for (let side = -1; side <= 1; side += 2) {
+    for (let r = 0; r < ROWS; r++) {
+      const v = (r + 0.5) / ROWS;                 // 0 = toe, 1 = crown
+      const sy = v * BW_H;
+      const sx = side * lerp(HB, HT, v);
+      const size = lerp(2.5, 1.5, v);             // heaviest units at the toe
+      const step = size * 1.15;
+      for (let x = -BW_LEN / 2 + 1; x <= BW_LEN / 2 - 1; x += step) {
+        place(x + rr(-0.5, 0.5),
+              sy + rr(-0.45, 0.45),
+              sx + rr(-0.35, 0.35) - side * size * 0.15,
+              size * rr(0.8, 1.2), false, rnd() < 0.55 ? 0 : (rnd() < 0.6 ? 1 : 2));
+      }
+    }
+  }
+  // --- toe berm: oversized units slumped at the waterline, both sides ---
+  for (let side = -1; side <= 1; side += 2) {
+    for (let x = -BW_LEN / 2; x <= BW_LEN / 2; x += 4.2) {
+      place(x + rr(-1, 1), rr(-1.2, 0.2), side * (HB + rr(0.3, 1.6)),
+            rr(2.2, 3.4), true, rnd() < 0.5 ? 0 : 2);
+    }
+  }
+  // --- crown fill: smaller core stone tucked under the cap, both edges ---
+  for (let side = -1; side <= 1; side += 2) {
+    for (let x = -BW_LEN / 2 + 1; x <= BW_LEN / 2 - 1; x += 2.6) {
+      place(x + rr(-0.6, 0.6), BW_H - rr(0.2, 1.0), side * (HT - rr(0.1, 1.2)),
+            rr(0.9, 1.6), false, rnd() < 0.5 ? 1 : 2);
+    }
+  }
+  // --- rounded heads so the mound doesn't end in a flat wall ---
+  for (const end of [-1, 1]) {
+    for (let i = 0; i < 26; i++) {
+      const a = rr(0, Math.PI * 2), rad = Math.sqrt(rnd());
+      place(end * (BW_LEN / 2 + rr(0, 2.4)),
+            rr(-0.8, BW_H - 1),
+            Math.cos(a) * rad * HB,
+            rr(1.6, 2.8), false, i % 3);
+    }
+  }
+
+  const TONES = [0x7d8286, 0x646a6d, 0x8f8a80];  // grey · dark grey · warm stone
+  const rubbleMeshes = TONES.map((color, i) => {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.97, flatShading: true });
+    const merged = BufferGeometryUtils.mergeGeometries(buckets[i], false);
+    return new THREE.Mesh(merged, mat);
+  });
+
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(BW_LEN + 2, 1.1, BW_TOP + 1.5),
+    new THREE.MeshStandardMaterial({ color: 0x9aa1a6, roughness: 0.85 }));
+  cap.position.y = BW_H + 0.55;
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(BW_LEN + 2, 0.12, 0.7),
+    new THREE.MeshStandardMaterial({ color: 0xc7a83c, roughness: 0.7 }));
+  stripe.position.set(0, BW_H + 1.16, (BW_TOP + 1.5) / 2 - 0.5);
+  bwGroup.add(core, ...rubbleMeshes, cap, stripe);
+  bwMats.push(...rubbleMeshes.map(m => m.material), core.material, cap.material);
+
+  // navigation beacon at the seaward end
+  const beacon = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 1, 12), darkMetal);
+  base.position.y = 0.5;
+  // red/white striped tower via canvas texture
+  const cnv = document.createElement('canvas'); cnv.width = 32; cnv.height = 128;
+  const cx = cnv.getContext('2d');
+  for (let i = 0; i < 6; i++) { cx.fillStyle = i % 2 ? '#e8ecef' : '#c23b2e'; cx.fillRect(0, i * 22, 32, 22); }
+  const stripes = new THREE.CanvasTexture(cnv);
+  stripes.colorSpace = THREE.SRGBColorSpace;
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 3.6, 12),
+    new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.7 }));
+  tower.position.y = 2.8;
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0x3a3f44, emissive: 0xff4d3d, emissiveIntensity: 0.4 });
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), lampMat);
+  lamp.position.y = 4.9;
+  beacon.add(base, tower, lamp);
+  // halo sprite
+  const hc = document.createElement('canvas'); hc.width = hc.height = 64;
+  const hx = hc.getContext('2d');
+  const grad = hx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(255,90,70,0.9)'); grad.addColorStop(1, 'rgba(255,90,70,0)');
+  hx.fillStyle = grad; hx.fillRect(0, 0, 64, 64);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(hc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.6
+  }));
+  halo.scale.setScalar(7);
+  halo.position.y = 4.9;
+  beacon.add(halo);
+  beacon.userData = { lampMat, halo };
+  beacon.position.set(BW_LEN / 2 - 4, BW_H + 1.1, 0);
+  bwGroup.add(beacon);
+  bwGroup.userData.beacon = beacon;
+
+  bwGroup.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  bwGroup.position.set(-45, -5.2, -35);
+  bwGroup.rotation.y = -12 * D2R;
+  world.add(bwGroup);
+}
+const bwState = { x: -45, z: -35, rot: -12 * D2R, rotT: -12 * D2R };
+breakwaters.push({ x: bwState.x, z: bwState.z, rot: bwState.rot, hl: BW_LEN / 2 + 1, hw: BW_BASE / 2 + 1, group: bwGroup });
+
+// hover/drag footprint highlight (scene-level so it floats on the water)
+const footprint = new THREE.Group();
+{
+  const fill = new THREE.Mesh(new THREE.PlaneGeometry(BW_LEN + 8, BW_BASE + 8),
+    new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.07, depthWrite: false }));
+  fill.rotation.x = -Math.PI / 2;
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(BW_LEN + 8, BW_BASE + 8)),
+    new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.55 }));
+  edge.rotation.x = -Math.PI / 2;
+  footprint.add(fill, edge);
+  footprint.position.y = 0.5;
+  footprint.visible = false;
+  footprint.renderOrder = 5;
+  world.add(footprint);
+}
+
+/* ================================================================
+   SECTION 7 — QUAY WAVE GAUGE (staff + riding float + 3D label)
+================================================================ */
+const GAUGE_X = 26, GAUGE_Z = 56;
+let gaugeFloat;
+{
+  const g = new THREE.Group();
+  // survey-staff texture: alternating 0.5 m bands + metre labels
+  const cnv = document.createElement('canvas'); cnv.width = 64; cnv.height = 512;
+  const cx = cnv.getContext('2d');
+  cx.fillStyle = '#e8ecef'; cx.fillRect(0, 0, 64, 512);
+  for (let i = 0; i < 24; i++) { if (i % 2 === 0) { cx.fillStyle = '#c23b2e'; cx.fillRect(0, i * 21.33, 64, 21.33); } }
+  cx.fillStyle = '#111'; cx.font = 'bold 15px monospace'; cx.textAlign = 'center';
+  for (let m = 0; m <= 12; m++) cx.fillText(String(m - 6), 32, 512 - m * 42.66 - 4);
+  const tex = new THREE.CanvasTexture(cnv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const pole = new THREE.Mesh(new THREE.BoxGeometry(0.4, 12, 0.4),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));
+  pole.position.y = 0.2; // spans y −5.8 … +6.2
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 0.25), darkMetal);
+  panel.position.set(0, 5.4, 0.4);
+  panel.rotation.x = -0.5;
+  gaugeFloat = new THREE.Group();
+  const f1 = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.45, 14),
+    new THREE.MeshStandardMaterial({ color: 0xc23b2e, roughness: 0.6 }));
+  const f2 = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.45, 14),
+    new THREE.MeshStandardMaterial({ color: 0xe8ecef, roughness: 0.6 }));
+  f1.position.y = -0.22; f2.position.y = 0.22;
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4, 6), darkMetal);
+  antenna.position.y = 1.1;
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x111, emissive: 0x22d3ee, emissiveIntensity: 1.5 }));
+  tip.position.y = 1.8;
+  gaugeFloat.add(f1, f2, antenna, tip);
+  g.add(pole, panel, gaugeFloat);
+  g.position.set(GAUGE_X, 0, GAUGE_Z);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  world.add(g);
+}
+const gaugeAnchor = new THREE.Vector3(GAUGE_X, 6.9, GAUGE_Z);
+
+/* ================================================================
+   SECTION 8 — NAV BUOYS (proof-of-life for the query API:
+   they already ride the same analytic surface the boats will use)
+================================================================ */
+const buoys = [];
+function makeBuoy(x, z, color, topmark, phase) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.2 });
+  const hull = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 0.8, 1.3, 14), mat);
+  hull.position.y = -0.15;
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 2.2, 8), darkMetal);
+  mast.position.y = 1.4;
+  let top;
+  if (topmark === 'cone') { top = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 10), mat); top.position.y = 2.9; }
+  else { top = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.9, 10), mat); top.position.y = 2.75; }
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0x222, emissive: color, emissiveIntensity: 0.3 });
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), lampMat);
+  lamp.position.y = 2.1;
+  g.add(hull, mast, top, lamp);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(x, 0, z);
+  world.add(g);
+  buoys.push({ g, x, z, phase, lampMat, q: new THREE.Quaternion() });
+}
+/* A V-shaped approach gate laid out behind the breakwater: one apex buoy on
+   the shelter axis, then two arms fanning out to seaward — port hand (red
+   cones) to the west, starboard hand (green cans) to the east. Generated
+   from the gate centreline so the pairs stay symmetric, and every one of
+   them rides the analytic surface exactly like the original two did.     */
+const GATE_X = -45, GATE_Z = -85, GATE_ARMS = 4, GATE_DX = 38, GATE_DZ = 45;
+makeBuoy(GATE_X, GATE_Z, 0xd8b13a, 'can', 1.2);                  // apex mark
+for (let i = 1; i <= GATE_ARMS; i++) {
+  const z = GATE_Z - GATE_DZ * i, dx = GATE_DX * i;
+  makeBuoy(GATE_X - dx, z, 0xc23b2e, 'cone', i * 0.6);           // port hand
+  makeBuoy(GATE_X + dx, z, 0x2e7d4f, 'can', i * 0.6 + 2.4);      // starboard hand
+}
+
+/* ================================================================
+   SECTION 8B — HERRING GULLS (low-poly, three meshes each)
+   ---------------------------------------------------------------
+   The basin had no moving thing in it that was not water. Gulls are the
+   cheapest fix for that and they do a second job as well: nothing else in
+   the frame tells the eye how big the quay is. A 2 m wingspan crossing in
+   front of a 12 m crane leg settles the scale question instantly.
+
+   Two behaviours, both driven by state that already exists:
+     · airborne — soaring circles that drift, with the flap/glide cycle
+       coupled to altitude (flap to climb, glide to sink), so the birds
+       cycle up and down the column on their own instead of on a timer;
+     · perched — on bollards, a lamp arm, the breakwater cap and a buoy
+       topmark, all standing into the wind. Real gulls do this, and here
+       the wind direction is the swell heading, so the whole line of them
+       swings round when the user drags the SWELL HEADING slider.
+   The buoy bird is parented to the buoy group and the breakwater birds to
+   bwGroup, so they ride the swell and follow the drag for free.
+
+   Geometry is deliberately faceted — three meshes per bird (fuselage, two
+   wings) on one shared flat-shaded material. Everything that does not move
+   relative to the body (tail fan, beak) is merged into the fuselage, so a
+   bird costs three draws and not five.
+================================================================ */
+/* A real herring gull is 0.6 m long with a 1.4 m span, which against a 190 m
+   quay is two pixels of nothing at the default framing. These are drawn about
+   half again over life size — enough to read as birds without becoming
+   albatrosses next to the 12 m crane legs. */
+const GULL_SCALE = 0.9;          // ≈ 1.7 m long, 2.7 m span
+const gulls = [], perched = [];
+
+/* One material for every part of every bird. The white/grey/charcoal
+   gradation that makes a gull recognisable — dark primaries, pale body,
+   yellow bill — is carried in vertex colours instead of in three materials,
+   which is what lets the parts share a program and a draw state. */
+const gullMat = new THREE.MeshStandardMaterial({
+  vertexColors: true, roughness: 0.72, metalness: 0.0,
+  flatShading: true, side: THREE.DoubleSide
+});
+
+/* Triangle soup helper: push a triangle with a per-vertex colour each. */
+function triPush(pos, col, a, b, c, ca, cb, cc) {
+  pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+  col.push(ca[0], ca[1], ca[2], cb[0], cb[1], cb[2], cc[0], cc[1], cc[2]);
+}
+function soupGeo(pos, col) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/* Fuselage: an elongated octahedron (nose · tail · two flanks · spine ·
+   belly), a flat tail fan behind it, and a bill on the front. Vertex
+   colours are linear — the mid grey on the spine is what keeps the bird
+   from reading as a white paper dart when the sun is behind it. */
+const GULL_BODY_GEO = (() => {
+  const P = [], C = [];
+  const WHITE = [0.80, 0.81, 0.82], GREY = [0.46, 0.50, 0.54];
+  const DARK = [0.13, 0.14, 0.15], BILL = [0.86, 0.62, 0.10];
+  const nose = [0, 0.03, 0.62], tail = [0, 0.15, -0.78];
+  const spine = [0, 0.18, 0.04], belly = [0, -0.14, 0.02];
+  const flankL = [-0.17, 0.03, 0.0], flankR = [0.17, 0.03, 0.0];
+  // forward cone
+  triPush(P, C, nose, flankR, spine, WHITE, WHITE, GREY);
+  triPush(P, C, nose, spine, flankL, WHITE, GREY, WHITE);
+  triPush(P, C, nose, flankL, belly, WHITE, WHITE, WHITE);
+  triPush(P, C, nose, belly, flankR, WHITE, WHITE, WHITE);
+  // rear cone
+  triPush(P, C, tail, spine, flankR, WHITE, GREY, WHITE);
+  triPush(P, C, tail, flankL, spine, WHITE, WHITE, GREY);
+  triPush(P, C, tail, belly, flankL, WHITE, WHITE, WHITE);
+  triPush(P, C, tail, flankR, belly, WHITE, WHITE, WHITE);
+  // tail fan, spread flat and notched dark at the trailing edge
+  const tf1 = [-0.23, 0.13, -1.06], tf2 = [0.23, 0.13, -1.06], tfm = [0, 0.13, -0.94];
+  triPush(P, C, tail, tf1, tfm, WHITE, DARK, WHITE);
+  triPush(P, C, tail, tfm, tf2, WHITE, WHITE, DARK);
+  // bill
+  const bt = [0, 0.02, 0.92];
+  triPush(P, C, nose, bt, [0.045, 0.05, 0.62], BILL, BILL, BILL);
+  triPush(P, C, nose, [-0.045, 0.05, 0.62], bt, BILL, BILL, BILL);
+  return soupGeo(P, C);
+})();
+
+/* Wing: a two-panel swept plate along ±x, cambered a little and tapering
+   into black primaries. Mirrored geometry rather than a negative scale on
+   the group — a mirrored scale inverts the sense of the flap rotation, and
+   the resulting bird beats one wing up while the other goes down. */
+function gullWingGeo(side) {
+  const P = [], C = [];
+  const WHITE = [0.80, 0.81, 0.82], MID = [0.42, 0.46, 0.50], TIP = [0.09, 0.09, 0.10];
+  const x = v => side * v;
+  const r0 = [x(0.05), 0, 0.20], r1 = [x(0.05), 0, -0.26];
+  const m0 = [x(0.62), 0.03, 0.15], m1 = [x(0.62), 0.03, -0.34];
+  const t0 = [x(1.34), 0.01, -0.05], t1 = [x(1.34), 0.01, -0.24];
+  triPush(P, C, r0, m0, m1, WHITE, MID, MID);
+  triPush(P, C, r0, m1, r1, WHITE, MID, WHITE);
+  triPush(P, C, m0, t0, t1, MID, TIP, TIP);
+  triPush(P, C, m0, t1, m1, MID, TIP, MID);
+  return soupGeo(P, C);
+}
+const GULL_WING_GEO = [gullWingGeo(1), gullWingGeo(-1)];   // [right, left]
+
+/* A bird is a group holding the fuselage and two wing groups. The wing
+   groups pivot at the shoulder, which is why they are groups and not just
+   meshes: the flap is a rotation about the shoulder, not about the origin. */
+function makeGull(parent) {
+  const g = new THREE.Group();
+  g.rotation.order = 'YXZ';           // yaw · pitch · roll, in that order
+  g.add(new THREE.Mesh(GULL_BODY_GEO, gullMat));
+  const wings = [0, 1].map(s => {
+    const w = new THREE.Group();
+    w.add(new THREE.Mesh(GULL_WING_GEO[s], gullMat));
+    w.position.set(0, 0.09, 0.02);
+    g.add(w);
+    return w;
+  });
+  g.scale.setScalar(GULL_SCALE);
+  parent.add(g);
+  return { g, wings };
+}
+
+/* ---- airborne ----------------------------------------------------------
+   Each bird orbits a slowly drifting centre. The circle is the skeleton;
+   what stops it reading as a carousel is that the centre wanders, the
+   radius breathes, and the altitude is not scripted at all — it falls out
+   of the wing cycle (see updateGulls). */
+const GULL_N = 12;
+for (let i = 0; i < GULL_N; i++) {
+  const { g, wings } = makeGull(world);
+  const low = i % 4 === 0;          // one in four works the water surface
+  gulls.push({
+    g, wings,
+    /* Centres are kept inside the basin the home camera actually frames
+       (z ∈ [−200, −20]) rather than spread over the whole 520 m sheet.
+       Apparent size is distance, not scale: a bird 400 m out is invisible
+       however large it is, and the flock has to cross the near water to be
+       worth having. */
+    cx: -60 + Math.sin(i * 2.7) * 140, cz: -110 + Math.cos(i * 1.9) * 90,
+    r: 26 + (i % 5) * 14,
+    dir: i % 3 === 0 ? -1 : 1,      // most of the flock turns the same way
+    ang: i * 1.37,
+    spd: 9.5 + (i % 4) * 1.6,       // m/s along the arc
+    y: low ? 9 + i : 20 + (i % 6) * 5,
+    vy: 0,
+    // the low birds bottom out at 6 m: a storm crest reaches ~4 m once the
+    // trochoid sharpens it, and a gull clipping through a wave is worse than
+    // a gull that never quite touches one
+    yMin: low ? 6 : 15, yMax: low ? 20 : 48,
+    flap: 1, amp: 0,                // flap = wing cycle on/off, amp = eased
+    ph: i * 0.9, rate: 9.5 + (i % 3) * 1.8,
+    seed: i * 12.9898
+  });
+}
+
+/* ---- perched -----------------------------------------------------------
+   `parent` is what the bird hangs off, so the two on the breakwater follow
+   a drag and the one on the buoy rides the swell — no per-frame bookkeeping
+   for either. Anchors are in the parent's local frame. */
+const PERCH = [
+  [world,      -120, 3.30, 61.6],   // bollard cap
+  [world,        40, 3.30, 61.6],   // bollard cap
+  [world,       160, 3.30, 61.6],   // bollard cap
+  [world,       -60, 10.25, 63.7],  // lamp arm
+  [bwGroup, BW_LEN / 2 - 22, BW_H + 1.12, 1.6],   // breakwater cap, local
+  [bwGroup,        -12, BW_H + 1.12, -2.2]        // breakwater cap, local
+];
+/* Legs are not modelled — they would be two pixels — so the fuselage is
+   lifted off the perch by roughly a leg's worth instead. Without it the
+   belly (local y = −0.14) sinks into the bollard cap. */
+const PERCH_LIFT = 0.16;
+for (const [parent, px, py, pz] of PERCH) {
+  const { g, wings } = makeGull(parent);
+  g.position.set(px, py + PERCH_LIFT, pz);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  // y0 carries the lift: the idle bob rewrites position.y every frame, so
+  // anything left out of y0 is silently discarded after the first one
+  perched.push({ g, wings, y0: py + PERCH_LIFT, yaw: 0, fidget: Math.random() * 4, flick: 0 });
+}
+// and one on a buoy topmark, so it rides the analytic surface with the buoy
+{
+  const { g, wings } = makeGull(buoys[0].g);
+  const y = 3.45 + PERCH_LIFT;   // cone topmark apex, plus the same leg lift
+  g.position.set(0, y, 0);
+  perched.push({ g, wings, y0: y, yaw: 0, fidget: 2.2, flick: 0 });
+}
+
+/* Folded wing: swept back along the body and foreshortened. `side * 1.2`
+   because the two geometries point opposite ways down x — see gullWingGeo. */
+function foldWings(wings) {
+  for (let s = 0; s < 2; s++) {
+    const side = s === 0 ? 1 : -1;
+    wings[s].rotation.set(0, side * 1.2, side * 0.05);
+    wings[s].scale.set(0.55, 1, 1.1);
+  }
+}
+for (const p of perched) foldWings(p.wings);
+
+let gullT = 0;
+function updateGulls(dt) {
+  if (dt <= 0) return;
+  gullT += dt;
+  /* Gulls stand and land facing the wind, and here the wind is the swell
+     heading: swell.dir is the direction the waves TRAVEL, so the bird faces
+     back down it. Ux/Uz is already that upwind unit vector. */
+  const windYaw = Math.atan2(Ux, Uz);
+
+  for (let i = 0; i < gulls.length; i++) {
+    const b = gulls[i];
+
+    /* Wander: the orbit centre drifts and the radius breathes, on periods
+       long enough (30–80 s) that the path never visibly repeats. */
+    const w = gullT * 0.05 + b.seed;
+    const rr = b.r * (1 + 0.22 * Math.sin(w * 1.7));
+    const ox = b.cx + 26 * Math.sin(w * 0.8), oz = b.cz + 26 * Math.cos(w * 0.63);
+
+    b.ang += (b.spd / rr) * b.dir * dt;
+    const sa = Math.sin(b.ang), ca = Math.cos(b.ang);
+
+    /* Altitude from the wing cycle rather than from a script: beating gains
+       height, gliding trades it back. The band limits flip the mode, so each
+       bird sets its own rhythm and they never sync up. */
+    b.vy += (b.flap ? 3.4 : -2.1) * dt;
+    b.vy = clamp(b.vy, -3.2, 3.2);
+    b.y += b.vy * dt;
+    if (b.y > b.yMax) { b.flap = 0; b.vy = Math.min(b.vy, 0); }
+    if (b.y < b.yMin) { b.flap = 1; b.vy = Math.max(b.vy, 0); }
+    // and an occasional change of mind mid-column, so it is not a pure sawtooth
+    if (Math.sin(w * 2.3 + i) > 0.986) b.flap = b.flap ? 0 : 1;
+
+    // eased so the wings never snap from beating to held
+    b.amp += ((b.flap ? 1 : 0) - b.amp) * (1 - Math.exp(-3.5 * dt));
+
+    b.g.position.set(ox + rr * sa, b.y, oz + rr * ca);
+
+    /* Attitude: nose along the velocity, banked into the turn, pitched by
+       the climb rate. A bird that circles without banking is the single
+       biggest tell that something is on rails. */
+    b.g.rotation.y = Math.atan2(ca * b.dir, -sa * b.dir);
+    b.g.rotation.x = -Math.atan2(b.vy, b.spd) * 0.75;
+    const bank = -b.dir * (0.34 + 0.10 * Math.sin(w * 1.3)) * (1 - 0.45 * b.amp);
+    b.g.rotation.z += (bank - b.g.rotation.z) * (1 - Math.exp(-2.2 * dt));
+
+    /* Wing beat. The hold is a shallow dihedral, not flat: a gliding gull
+       carries its wings slightly above the horizontal, and flat wings are
+       what make model birds look like paper aeroplanes. The downstroke is
+       given more travel than the upstroke by squaring the negative half. */
+    b.ph += b.rate * dt;
+    const s = Math.sin(b.ph);
+    const beat = (s > 0 ? s : -s * s) * 0.85 * b.amp;
+    const a = 0.12 + beat;
+    for (let sd = 0; sd < 2; sd++) {
+      const side = sd === 0 ? 1 : -1;
+      b.wings[sd].rotation.z = side * a;
+      // wings sweep forward on the downstroke — the wrist flex, cheaply
+      b.wings[sd].rotation.y = side * 0.13 * Math.cos(b.ph) * b.amp;
+    }
+  }
+
+  /* Perched: face the wind, shift weight, and now and then flick the wings
+     open and settle again. The flick is what sells them as alive — a bird
+     that only bobs reads as a prop. */
+  for (let i = 0; i < perched.length; i++) {
+    const p = perched[i];
+    let d = ((windYaw - p.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    p.yaw += d * (1 - Math.exp(-1.1 * dt));
+    const t = gullT + i * 3.1;
+    p.g.rotation.y = p.yaw + 0.16 * Math.sin(t * 0.7) + 0.09 * Math.sin(t * 2.9);
+    p.g.position.y = p.y0 + 0.012 * Math.sin(t * 1.6);
+
+    p.fidget -= dt;
+    if (p.fidget <= 0) { p.fidget = 5 + (i * 2.7) % 7; p.flick = 1; }
+    if (p.flick > 0) {
+      p.flick = Math.max(p.flick - dt * 1.9, 0);
+      const k = Math.sin(p.flick * Math.PI) * 0.9;   // out and back in one arc
+      for (let sd = 0; sd < 2; sd++) {
+        const side = sd === 0 ? 1 : -1;
+        p.wings[sd].rotation.set(0, side * (1.2 - 0.75 * k), side * (0.05 + 0.5 * k));
+        p.wings[sd].scale.set(0.55 + 0.45 * k, 1, 1.1 - 0.1 * k);
+      }
+    }
+  }
+}
+
+/* ================================================================
+   SECTION 9 — INTERACTION: orbit + breakwater dragging
+================================================================ */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const hitPoint = new THREE.Vector3();
+let dragging = false, hovering = false;
+const grabOffset = new THREE.Vector3();
+
+const localRay = new THREE.Ray();
+function castAt(clientX, clientY) {
+  ndc.set((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+}
+/* The drag plane is the still-water plane in HARBOUR coords, so the ray has
+   to come back out of the world transform before it is intersected —
+   otherwise the grab point drifts by whatever transform `world` carries. */
+function castGround(clientX, clientY) {
+  castAt(clientX, clientY);
+  localRay.copy(raycaster.ray).applyMatrix4(worldInv);
+  return localRay.intersectPlane(dragPlane, hitPoint) !== null;
+}
+function overBreakwater(clientX, clientY) {
+  castAt(clientX, clientY);
+  return raycaster.intersectObject(bwGroup, true).length > 0;
+}
+// capture phase on window: runs BEFORE OrbitControls' own pointerdown
+window.addEventListener('pointerdown', e => {
+  cancelIntro();
+  if (e.target !== renderer.domElement) return;
+  if (overBreakwater(e.clientX, e.clientY)) {
+    dragging = true;
+    controls.enabled = false;
+    if (castGround(e.clientX, e.clientY)) {
+      grabOffset.set(bwState.x - hitPoint.x, 0, bwState.z - hitPoint.z);
+    }
+    renderer.domElement.style.cursor = 'grabbing';
+    footprint.visible = true;
+  }
+}, true);
+window.addEventListener('pointermove', e => {
+  if (dragging) {
+    if (castGround(e.clientX, e.clientY)) {
+      bwState.x = clamp(hitPoint.x + grabOffset.x, -340, 340);
+      bwState.z = clamp(hitPoint.z + grabOffset.z, -400, 52);
+    }
+    return;
+  }
+  if (e.target === renderer.domElement) {
+    hovering = overBreakwater(e.clientX, e.clientY);
+    renderer.domElement.style.cursor = hovering ? 'grab' : '';
+    footprint.visible = hovering;
+  } else if (hovering) {
+    hovering = false;
+    footprint.visible = false;
+    renderer.domElement.style.cursor = '';
+  }
+});
+function endDrag() {
+  if (!dragging) return;
+  dragging = false;
+  controls.enabled = true;
+  renderer.domElement.style.cursor = hovering ? 'grab' : '';
+  footprint.visible = hovering;
+}
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+
+/* ================================================================
+   SECTION 10 — UI WIRING
+================================================================ */
+function bindRange(id, fn) { el(id).addEventListener('input', e => fn(+e.target.value)); }
+bindRange('amp', v => { swell.ampT = v; el('ampVal').textContent = v.toFixed(2) + ' m'; clearPresets(); });
+bindRange('dir', v => {
+  swell.dirT = v * D2R;
+  el('dirVal').textContent = String(v).padStart(3, '0') + '°';
+  el('compassArrow').style.transform = `rotate(${v}deg)`;
+});
+bindRange('len', v => {
+  swell.lenT = v;
+  el('lenVal').textContent = v + ' m';
+  el('periodVal').textContent = (2 * Math.PI / Math.sqrt(9.81 * 2 * Math.PI / v)).toFixed(1) + ' s';
+  clearPresets();
+});
+function fmt(v) { return (v < 0 ? '−' + Math.abs(v) : String(v)) + '°'; }
+bindRange('angle', v => { bwState.rotT = v * D2R; el('angleVal').textContent = fmt(v); });
+el('angleVal').textContent = fmt(-12);
+
+el('resetBtn').addEventListener('click', () => {
+  bwState.x = -45; bwState.z = -35; bwState.rotT = -12 * D2R;
+  el('angle').value = -12; el('angleVal').textContent = fmt(-12);
+});
+const PRESETS = { calm: [0.5, 60], moderate: [1.4, 90], storm: [3.2, 130] };
+function clearPresets() { document.querySelectorAll('[data-preset]').forEach(b => b.classList.remove('active')); }
+document.querySelectorAll('[data-preset]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const [a, l] = PRESETS[btn.dataset.preset];
+    el('amp').value = a; el('amp').dispatchEvent(new Event('input'));
+    el('len').value = l; el('len').dispatchEvent(new Event('input'));
+    clearPresets(); btn.classList.add('active');
+  });
+});
+function togglePause() {
+  paused = !paused;
+  el('pauseBtn').innerHTML = paused ? '▶&nbsp;RESUME' : 'II&nbsp;PAUSE';
+}
+el('pauseBtn').addEventListener('click', togglePause);
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT') { e.preventDefault(); togglePause(); }
+});
+
+/* ================================================================
+   SECTION 11 — GAUGE READOUT, 3D LABEL, LIVE CHART
+================================================================ */
+const gaugeHist = [], offHist = [];
+const chart = el('chart'), ctx2d = chart.getContext('2d');
+function sizeChart() {
+  const dpr = Math.min(devicePixelRatio, 2);
+  chart.width = chart.clientWidth * dpr;
+  chart.height = chart.clientHeight * dpr;
+}
+sizeChart();
+
+function drawChart() {
+  const W = chart.width, H = chart.height;
+  ctx2d.clearRect(0, 0, W, H);
+  const t0 = simT - 20;
+  let mn = -0.5, mx = 0.5;
+  for (const s of gaugeHist) { if (s.h < mn) mn = s.h; if (s.h > mx) mx = s.h; }
+  for (const s of offHist) { if (s.h < mn) mn = s.h; if (s.h > mx) mx = s.h; }
+  const pad = (mx - mn) * 0.15 + 0.1; mn -= pad; mx += pad;
+  const X = t => ((t - t0) / 20) * W;
+  const Y = h => H - ((h - mn) / (mx - mn)) * H;
+  // grid
+  ctx2d.strokeStyle = 'rgba(148,163,184,0.12)'; ctx2d.lineWidth = 1;
+  for (let i = 1; i < 4; i++) { ctx2d.beginPath(); ctx2d.moveTo(0, H * i / 4); ctx2d.lineTo(W, H * i / 4); ctx2d.stroke(); }
+  if (mn < 0 && mx > 0) {
+    ctx2d.strokeStyle = 'rgba(148,163,184,0.25)';
+    ctx2d.beginPath(); ctx2d.moveTo(0, Y(0)); ctx2d.lineTo(W, Y(0)); ctx2d.stroke();
+  }
+  const plot = (hist, stroke, fill) => {
+    if (hist.length < 2) return;
+    const step = Math.max(1, Math.floor(hist.length / (W / 2)));
+    ctx2d.beginPath();
+    for (let i = 0; i < hist.length; i += step) {
+      const x = X(hist[i].t), y = Y(hist[i].h);
+      i === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+    }
+    if (fill) {
+      const last = hist[hist.length - 1];
+      const grd = ctx2d.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, 'rgba(34,211,238,0.22)'); grd.addColorStop(1, 'rgba(34,211,238,0)');
+      ctx2d.save();
+      ctx2d.lineTo(X(last.t), H); ctx2d.lineTo(X(hist[0].t), H); ctx2d.closePath();
+      ctx2d.fillStyle = grd; ctx2d.fill(); ctx2d.restore();
+      ctx2d.beginPath();
+      for (let i = 0; i < hist.length; i += step) {
+        const x = X(hist[i].t), y = Y(hist[i].h);
+        i === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+      }
+    }
+    ctx2d.strokeStyle = stroke; ctx2d.lineWidth = fill ? 2 : 1.2; ctx2d.stroke();
+  };
+  plot(offHist, 'rgba(226,232,240,0.4)', false);
+  plot(gaugeHist, '#22d3ee', true);
+  const last = gaugeHist[gaugeHist.length - 1];
+  if (last) {
+    ctx2d.fillStyle = '#22d3ee';
+    ctx2d.shadowColor = '#22d3ee'; ctx2d.shadowBlur = 8;
+    ctx2d.beginPath(); ctx2d.arc(X(last.t), Y(last.h), 3, 0, 7); ctx2d.fill();
+    ctx2d.shadowBlur = 0;
+  }
+}
+
+const gaugeLabel = el('gaugeLabel');
+const projV = new THREE.Vector3();
+let statTimer = 0;
+function updateGaugeAndUI(dt) {
+  const g = Harbor.sampleWater(GAUGE_X, GAUGE_Z);
+  const off = Harbor.sampleWater(GAUGE_X, -330);
+  // float rides the surface
+  gaugeFloat.position.y = g.height + 0.15;
+  gaugeFloat.rotation.x = clamp(g.normal.z, -1, 1) * 0.35;
+  gaugeFloat.rotation.z = clamp(-g.normal.x, -1, 1) * 0.35;
+  // history
+  const lastT = gaugeHist.length ? gaugeHist[gaugeHist.length - 1].t : -1;
+  if (simT > lastT) {
+    gaugeHist.push({ t: simT, h: g.height });
+    offHist.push({ t: simT, h: off.height });
+    while (gaugeHist.length && gaugeHist[0].t < simT - 22) { gaugeHist.shift(); offHist.shift(); }
+  }
+  // 3D-anchored label
+  projV.copy(gaugeAnchor).applyMatrix4(world.matrixWorld).project(camera);
+  const onScreen = projV.z < 1 && Math.abs(projV.x) < 1.05 && Math.abs(projV.y) < 1.05;
+  gaugeLabel.style.opacity = onScreen ? 1 : 0;
+  if (onScreen) {
+    gaugeLabel.style.left = ((projV.x * 0.5 + 0.5) * innerWidth) + 'px';
+    gaugeLabel.style.top = ((-projV.y * 0.5 + 0.5) * innerHeight) + 'px';
+  }
+  // throttled text updates
+  statTimer -= dt;
+  if (statTimer <= 0) {
+    statTimer = 0.12;
+    const txt = g.height.toFixed(2);
+    el('gaugeNum').textContent = txt;
+    el('gaugeLabelVal').textContent = txt;
+    el('offNum').textContent = off.height.toFixed(2) + ' m';
+    el('shelterPct').textContent = Math.round((1 - g.attenuation) * 100) + '%';
+    let hmax = 0, sum = 0;
+    for (const s of gaugeHist) { if (s.h > hmax) hmax = s.h; sum += s.h; }
+    el('hmaxVal').textContent = hmax.toFixed(2) + ' m';
+    el('meanVal').textContent = (gaugeHist.length ? sum / gaugeHist.length : 0).toFixed(2) + ' m';
+  }
+  drawChart();
+}
+
+/* ================================================================
+   SECTION 12 — ★ PHASE-2 PUBLIC API ★
+   Moored boats will call Harbor.sampleWater() at their hull
+   sampling points each physics tick to compute buoyancy forces.
+   The surface is analytic in (x, z, t): no mesh raycasting needed,
+   deterministic, and identical to what is rendered.
+================================================================ */
+window.Harbor = {
+  version: '1.0.0-phase1',
+  time: () => simT,
+  /* Sample the moving water surface anywhere.
+     → { height, normal:Vector3, slopeX, slopeZ, attenuation } */
+  sampleWater(x, z, t = simT) {
+    waveAt(x, z, t, _w);
+    return {
+      height: _w.h,
+      normal: new THREE.Vector3(-_w.sx, 1, -_w.sz).normalize(),
+      slopeX: _w.sx,
+      slopeZ: _w.sz,
+      attenuation: _w.attEff // 1 = open sea … 0.15 = deep in breakwater lee
+    };
+  },
+  heightAt(x, z, t = simT) { waveAt(x, z, t, _w); return _w.h; },
+  getSwell: () => ({
+    amplitude: swell.amp,
+    directionDeg: ((swell.dir * R2D) % 360 + 360) % 360,
+    wavelength: swell.len,
+    period: 2 * Math.PI / Math.sqrt(9.81 * 2 * Math.PI / swell.len)
+  }),
+  breakwaters // live reference: [{x, z, rot, hl, hw, group}]
+};
+console.log('%c⬡ Harbor API ready%c  window.Harbor.sampleWater(x, z) → { height, normal, attenuation }',
+  'color:#22d3ee;font-weight:bold', 'color:#94a3b8');
+
+/* ================================================================
+   SECTION 13 — MAIN LOOP
+================================================================ */
+const clock = new THREE.Clock();
+let introT = 0, introActive = true;
+const introFrom = new THREE.Vector3();   // both poses are solved, not typed —
+const introTo = new THREE.Vector3();     // see fitCamera() below
+function cancelIntro() { introActive = false; }
+
+/* ---- FRAMING: solved on the camera, world stays 1:1 --------------------
+   The harbour is a fixed object; the camera is what moves. The home pose is
+   built from three things:
+     · ROTATION — a fixed azimuth/elevation. The azimuth is deliberately
+       oblique (~46°) so the 380 m quay runs diagonally across the frame and
+       is foreshortened by ~cos(46°); broadside it would set the distance on
+       its own and push everything else into miniature.
+     · POSITION (dolly) — distance along that direction, solved so the widest
+       projected extent lands inside the usable band. Projected size goes as
+       ~1/distance, so `dist *= need` is a contraction that converges in a
+       few passes; it is re-solved rather than divided once because the pan
+       below moves the target between passes.
+     · POSITION (pan) — the usable band is NOT centred: the two fixed side
+       panels eat unequal bites out of it. After each dolly step the target
+       slides along the camera's own right/up axes so the content's centre
+       lands on the band's centre, which is what buys symmetric margin.
+   Solved at the HOME pose only — never the intro pose.                     */
+const FIT_MARGIN = 0.07;                 // margin per side, fraction of frame
+/* The panels are translucent overlays the harbour is meant to pass behind,
+   so clearing them outright is not the goal — that costs ~46% of the width
+   and shrinks the port to a model kit. Instead the frame is the canvas, and
+   the panels only cap how far the geometry may run under them.            */
+const PANEL_INTRUSION = 0.55;            // fraction of a panel it may reach into
+/* The ROTATION half of the framing, in degrees. Kept as data (and exposed on
+   window.Harbor) so the pose can be swept and re-solved without an edit —
+   azimuth trades screen width for screen height, elevation trades the water
+   plane's depth for its height, and the dolly below absorbs both.         */
+const homeAngles = { azim: 52, elev: 19 };
+const homeDir = new THREE.Vector3();
+/* unit vector target → camera; -x/-z puts the eye offshore of the quay */
+function updateHomeDir() {
+  const a = THREE.MathUtils.degToRad(homeAngles.azim);
+  const e = THREE.MathUtils.degToRad(homeAngles.elev);
+  homeDir.set(-Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e));
+}
+const _upAxis = new THREE.Vector3(0, 1, 0);
+const fitCam = new THREE.PerspectiveCamera();
+const fitCorner = new THREE.Vector3(), fitProbe = new THREE.Vector3();
+const homeTarget = new THREE.Vector3();
+const camRight = new THREE.Vector3(), camUp = new THREE.Vector3();
+const fitBox = new THREE.Box3(), fitBoxTmp = new THREE.Box3();
+
+/* What has to fit, in harbour coords. The quay contributes only its
+   waterfront band — full length, face and coping — not the 180-deep landward
+   apron, whose far corners sit behind the shoreline, read as ground rather
+   than structure, and would otherwise drive the whole solve (they alone cost
+   a factor of two). The breakwater is re-measured each solve so a dragged
+   one still frames correctly on the next resize.                          */
+const QUAY_FIT_BOX = new THREE.Box3(
+  new THREE.Vector3(-QUAY_HL, -4.2, 56),
+  new THREE.Vector3( QUAY_HL,  3.0, 96)
+);
+
+/* Usable band in NDC: -1..1 minus the panel bites and the margin. */
+function safeBand(vw) {
+  let left = 0, right = 0;
+  for (const p of document.querySelectorAll('aside')) {
+    if (!p.offsetParent) continue;       // panel hidden at this breakpoint
+    const r = p.getBoundingClientRect();
+    if (r.left < vw / 2) left = Math.max(left, r.right * (1 - PANEL_INTRUSION));
+    else right = Math.max(right, (vw - r.left) * (1 - PANEL_INTRUSION));
+  }
+  const m = FIT_MARGIN * 2;              // NDC spans 2 units
+  return {
+    minX: -1 + (2 * left) / vw + m, maxX: 1 - (2 * right) / vw - m,
+    minY: -1 + m, maxY: 1 - m
+  };
+}
+
+/* vw/vh are overridable so the framing can be solved for a viewport other
+   than the current one (headless checks, and a window reporting 0 while the
+   pane is hidden — a zero width would otherwise poison the solve with NaN) */
+function fitCamera(vw = innerWidth, vh = innerHeight) {
+  vw = Math.max(1, vw); vh = Math.max(1, vh);
+  updateHomeDir();
+  const band = safeBand(vw);
+  const cxWant = (band.minX + band.maxX) / 2, cyWant = (band.minY + band.maxY) / 2;
+  const bandW = Math.max(0.25, band.maxX - band.minX);
+  const bandH = Math.max(0.25, band.maxY - band.minY);
+
+  fitBox.copy(QUAY_FIT_BOX).union(fitBoxTmp.setFromObject(bwGroup));
+  fitBox.getCenter(homeTarget);
+  /* the pan is a correction, not a free variable — it may never walk the
+     target outside this envelope, or the solve can drift the eye into the
+     middle of the harbour and start "fitting" geometry behind the lens */
+  const anchor = homeTarget.clone(), leash = fitBox.getSize(fitCorner).length() * 0.35 + 30;
+
+  const tanY = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  let dist = 500, shot = null;
+  /* Best contained pose seen so far. The coupled dolly+pan iteration is not
+     guaranteed to land ON the tolerance — at steep azimuths it ends up in a
+     small limit cycle around it — so rather than trust the final pass, keep
+     the tightest pose that actually fit and use that. Containment is the
+     contract; the last iterate is only a candidate.                        */
+  let best = null;
+  for (let pass = 0; pass < 40; pass++) {
+    fitCam.copy(camera);
+    fitCam.aspect = vw / vh;
+    fitCam.position.copy(homeDir).multiplyScalar(dist).add(homeTarget);
+    fitCam.lookAt(homeTarget);
+    fitCam.updateMatrixWorld(true);
+    fitCam.updateProjectionMatrix();
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, behind = false;
+    for (let i = 0; i < 8; i++) {
+      fitCorner.set(i & 1 ? fitBox.max.x : fitBox.min.x,
+                    i & 2 ? fitBox.max.y : fitBox.min.y,
+                    i & 4 ? fitBox.max.z : fitBox.min.z);
+      // view space first: a corner at or behind the lens projects to nonsense
+      // (the w divide flips sign), which would feed the solve garbage extents
+      if (fitProbe.copy(fitCorner).applyMatrix4(fitCam.matrixWorldInverse).z > -fitCam.near) behind = true;
+      fitCorner.project(fitCam);
+      minX = Math.min(minX, fitCorner.x); maxX = Math.max(maxX, fitCorner.x);
+      minY = Math.min(minY, fitCorner.y); maxY = Math.max(maxY, fitCorner.y);
+    }
+    if (behind) { dist *= 1.8; continue; }   // too close to measure — back off
+    const need = Math.max((maxX - minX) / bandW, (maxY - minY) / bandH);
+    const dx = (minX + maxX) / 2 - cxWant, dy = (minY + maxY) / 2 - cyWant;
+    shot = { pass, minX, maxX, minY, maxY, need, dx, dy, dist,
+             limit: (maxX - minX) / bandW > (maxY - minY) / bandH ? 'x' : 'y' };
+
+    const E = 1e-3;
+    if (minX >= band.minX - E && maxX <= band.maxX + E &&
+        minY >= band.minY - E && maxY <= band.maxY + E) {
+      const area = (maxX - minX) * (maxY - minY);
+      if (!best || area > best.area) best = { dist, area, shot, target: homeTarget.clone() };
+    }
+    if (Math.abs(need - 1) < 0.003 && Math.abs(dx) < 0.004 && Math.abs(dy) < 0.004) break;
+
+    /* Slide the target so the content re-centres inside the band. Damped and
+       clamped: the box is deep along the view axis, so a full-step correction
+       computed at the target plane over-shoots and the pan/dolly pair can ring
+       itself apart (it did — at steep azimuths the target ran off to y ≈ -16 km). */
+    fitCam.matrixWorld.extractBasis(camRight, camUp, fitCorner);
+    const halfH = tanY * dist, halfW = halfH * fitCam.aspect;
+    const PAN_GAIN = 0.55;
+    homeTarget.addScaledVector(camRight, THREE.MathUtils.clamp(dx * PAN_GAIN, -0.4, 0.4) * halfW)
+              .addScaledVector(camUp,    THREE.MathUtils.clamp(dy * PAN_GAIN, -0.4, 0.4) * halfH);
+    if (homeTarget.distanceTo(anchor) > leash) {                     // keep it on the leash
+      homeTarget.sub(anchor).setLength(leash).add(anchor);
+    }
+
+    dist *= need;                        // >1 = too big for the band, back off
+  }
+  dist = THREE.MathUtils.clamp(dist, 120, 1800);
+
+  introTo.copy(homeDir).multiplyScalar(dist).add(homeTarget);
+  /* Intro start: same solved framing, pulled back and lifted, swung ~12°
+     round the target — the ease-in then settles onto the fitted pose. */
+  introFrom.copy(homeDir).multiplyScalar(dist * 1.45)
+           .applyAxisAngle(_upAxis, THREE.MathUtils.degToRad(12))
+           .add(homeTarget);
+  introFrom.y += dist * 0.30;
+
+  controls.maxDistance = Math.max(760, dist * 1.9);
+  if (!userMovedCam) {
+    controls.target.copy(homeTarget);
+    if (!introActive) camera.position.copy(introTo);   // mid-intro: animate() lerps
+  }
+
+  world.updateMatrixWorld(true);
+  worldInv.copy(world.matrixWorld).invert();
+  /* framing readout: `frame` is the last solved NDC bbox — every component
+     should sit inside `band`, which is the visible-margin contract */
+  window.Harbor.fit = { scale: world.scale.x, dist, band, frame: shot,
+                        target: homeTarget.toArray(), box: [fitBox.min.toArray(), fitBox.max.toArray()] };
+}
+window.addEventListener('wheel', cancelIntro, { passive: true });
+
+let firstFrame = true;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (!paused) simT += dt;
+
+  // smooth parameter transitions
+  const k = 1 - Math.exp(-2.4 * dt);
+  swell.amp += (swell.ampT - swell.amp) * k;
+  swell.len += (swell.lenT - swell.len) * k;
+  let dd = ((swell.dirT - swell.dir + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  swell.dir += dd * k;
+  bwState.rot += (bwState.rotT - bwState.rot) * k;
+  updateComponents();
+
+  // sync breakwater transform → shelter model
+  bwGroup.position.x = bwState.x;
+  bwGroup.position.z = bwState.z;
+  bwGroup.rotation.y = bwState.rot;
+  const bw = breakwaters[0];
+  bw.x = bwState.x; bw.z = bwState.z; bw.rot = bwState.rot;
+  footprint.position.x = bwState.x;
+  footprint.position.z = bwState.z;
+  footprint.rotation.y = bwState.rot;
+  // hover glow
+  const glow = (dragging || hovering) ? 0.35 : 0;
+  for (const m of bwMats) m.emissive.setRGB(0.02 * glow * 3, 0.1 * glow, 0.12 * glow);
+
+  // beacon blink
+  const blink = Math.sin(simT * 2.6) > 0.72;
+  const bc = bwGroup.userData.beacon.userData;
+  bc.lampMat.emissiveIntensity = blink ? 3.2 : 0.35;
+  bc.halo.material.opacity = blink ? 0.85 : 0.12;
+  bc.halo.scale.setScalar(blink ? 8.5 : 5);
+
+  updateWater(dt);
+
+  // buoys ride the analytic surface (phase-2 buoyancy preview)
+  for (const b of buoys) {
+    const s = Harbor.sampleWater(b.x, b.z);
+    b.g.position.y = s.height - 0.1;
+    _qTmp.setFromUnitVectors(_up, s.normal);
+    b.q.slerp(_qTmp, 1 - Math.exp(-3.5 * dt));
+    b.g.quaternion.copy(b.q);
+    b.lampMat.emissiveIntensity = Math.sin(simT * 2.2 + b.phase) > 0.65 ? 3 : 0.25;
+  }
+
+  // gulls freeze with the sea state, so SPACE stills the whole scene
+  updateGulls(paused ? 0 : dt);
+
+  updateGaugeAndUI(dt);
+
+  if (introActive) {
+    introT += dt / 2.2;
+    const e = 1 - Math.pow(1 - Math.min(introT, 1), 3);
+    camera.position.lerpVectors(introFrom, introTo, e);
+    if (introT >= 1) introActive = false;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+
+  if (firstFrame) {
+    firstFrame = false;
+    const loader = el('loader');
+    loader.style.transition = 'opacity .6s';
+    loader.style.opacity = 0;
+    setTimeout(() => loader.remove(), 650);
+  }
+}
+const _up = new THREE.Vector3(0, 1, 0);
+const _qTmp = new THREE.Quaternion();
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  fitCamera();  // vertical fov is fixed, so a narrow window must re-fit
+  sizeChart();
+});
+
+window.Harbor.fitCamera = fitCamera;   // re-solve / probe other viewports
+window.Harbor.homeAngles = homeAngles; // live pose tuning: set, then re-fit
+fitCamera();
+camera.position.copy(introFrom);
+controls.update();
+animate();
+</script>
+</body>
+</html>

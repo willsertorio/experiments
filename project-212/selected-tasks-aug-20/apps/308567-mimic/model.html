@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mimic Vault — A Dungeon of Liars</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html,body{height:100%;overflow:hidden;background:#050308;font-family:'Inter',sans-serif;}
+  .font-cinzel{font-family:'Cinzel',serif;}
+  canvas{display:block;}
+  /* ---------- overlays ---------- */
+  #vignette{background:radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,.62) 100%);}
+  #dmgFlash{background:radial-gradient(ellipse at center, rgba(120,0,0,.15) 30%, rgba(190,10,10,.6) 100%);opacity:0;transition:opacity .55s ease-out;}
+  #healFlash{background:radial-gradient(ellipse at center, transparent 45%, rgba(40,190,90,.35) 100%);opacity:0;transition:opacity .7s ease-out;}
+  #deathFade{background:radial-gradient(ellipse at center, rgba(60,0,0,.5) 20%, rgba(20,0,0,.95) 100%);opacity:0;transition:opacity 1.3s ease-in;}
+  #fader{background:#000;opacity:0;transition:opacity .3s ease;}
+  #lowHp{background:radial-gradient(ellipse at center, transparent 55%, rgba(200,20,20,.4) 100%);opacity:0;}
+  #lowHp.on{animation:lowPulse 1s ease-in-out infinite;}
+  @keyframes lowPulse{0%,100%{opacity:.15}50%{opacity:.75}}
+  /* ---------- crosshair ---------- */
+  #crosshair{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30;pointer-events:none;}
+  #chDot{width:4px;height:4px;border-radius:99px;background:rgba(255,255,255,.75);position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);}
+  #chRing{width:26px;height:26px;border-radius:99px;border:1.5px solid rgba(255,255,255,.35);position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(1);transition:transform .15s ease,border-color .15s ease;}
+  #crosshair.on #chRing{transform:translate(-50%,-50%) scale(1.45);border-color:#e8c66a;}
+  #crosshair.on #chDot{background:#e8c66a;}
+  #prompt{transition:opacity .15s ease;}
+  /* ---------- floating text ---------- */
+  .float-txt{position:absolute;top:56%;font-family:'Cinzel',serif;font-weight:700;font-size:1.35rem;letter-spacing:.05em;pointer-events:none;text-shadow:0 2px 10px rgba(0,0,0,.9);animation:floatUp 1.15s ease-out forwards;white-space:nowrap;}
+  @keyframes floatUp{0%{transform:translate(-50%,0);opacity:0}12%{opacity:1}100%{transform:translate(-50%,-95px);opacity:0}}
+  /* ---------- UI chrome ---------- */
+  .panel{background:rgba(10,6,14,.72);border:1px solid rgba(212,175,55,.22);backdrop-filter:blur(10px);}
+  .gold-text{background:linear-gradient(to bottom,#f6e3a1,#c99a2e);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .btn-gold{font-family:'Cinzel',serif;font-weight:700;letter-spacing:.18em;color:#1a1206;background:linear-gradient(to bottom,#f0d488,#b98c2a);border:1px solid #f6e3a1;box-shadow:0 0 24px rgba(212,175,55,.25),inset 0 1px 0 rgba(255,255,255,.5);transition:all .2s ease;cursor:pointer;}
+  .btn-gold:hover{box-shadow:0 0 44px rgba(212,175,55,.5),inset 0 1px 0 rgba(255,255,255,.6);transform:translateY(-1px);}
+  .btn-ghost{font-family:'Cinzel',serif;letter-spacing:.15em;color:#cbbd93;border:1px solid rgba(212,175,55,.35);transition:all .2s ease;cursor:pointer;}
+  .btn-ghost:hover{border-color:rgba(212,175,55,.8);color:#f0e2b8;background:rgba(212,175,55,.08);}
+  .mode-card{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03);cursor:pointer;transition:all .18s ease;}
+  .mode-card:hover{border-color:rgba(212,175,55,.45);}
+  .mode-card.sel{border-color:#d4af37;background:rgba(212,175,55,.09);box-shadow:0 0 26px rgba(212,175,55,.18);}
+  .hp-outer{box-shadow:inset 0 2px 6px rgba(0,0,0,.8),0 0 0 1px rgba(0,0,0,.6);}
+  #hpFill{background:linear-gradient(to right,#8c1d12,#e0392a 60%,#ff7a5c);transition:width .25s ease;box-shadow:0 0 12px rgba(224,57,42,.55);}
+  .title-glow{filter:drop-shadow(0 0 26px rgba(212,175,55,.35));}
+  .screen{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;}
+  .screen-bg{background:linear-gradient(to bottom, rgba(5,3,8,.82), rgba(5,3,8,.6) 40%, rgba(5,3,8,.9));backdrop-filter:blur(3px);}
+  .stat-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);}
+  .hidden-screen{display:none !important;}
+</style>
+</head>
+<body class="select-none">
+
+<div id="app" class="fixed inset-0 z-0"></div>
+
+<!-- atmosphere overlays -->
+<div id="vignette" class="fixed inset-0 z-10 pointer-events-none"></div>
+<div id="lowHp" class="fixed inset-0 z-10 pointer-events-none"></div>
+<div id="healFlash" class="fixed inset-0 z-10 pointer-events-none"></div>
+<div id="dmgFlash" class="fixed inset-0 z-20 pointer-events-none"></div>
+<div id="deathFade" class="fixed inset-0 z-20 pointer-events-none"></div>
+
+<!-- HUD -->
+<div id="hud" class="fixed inset-0 z-30 pointer-events-none hidden-screen">
+  <div class="absolute top-5 left-6 flex items-center gap-3">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="#e0392a" style="filter:drop-shadow(0 0 6px rgba(224,57,42,.7))"><path d="M12 21s-7.5-4.9-10-9.2C.3 8.6 2.3 4.5 6.2 4.5c2.2 0 3.7 1.2 4.6 2.6.1.2.5.2.6 0 .9-1.4 2.4-2.6 4.6-2.6 3.9 0 5.9 4.1 4.2 7.3C19.5 16.1 12 21 12 21z"/></svg>
+    <div>
+      <div class="hp-outer w-56 h-4 rounded-sm bg-black/70 overflow-hidden">
+        <div id="hpFill" class="h-full rounded-sm" style="width:100%"></div>
+      </div>
+      <div id="hpNum" class="text-[11px] text-red-200/80 mt-1 font-medium tracking-widest">100</div>
+    </div>
+  </div>
+  <div class="absolute top-5 right-6 text-right">
+    <div class="flex items-center justify-end gap-2">
+      <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#d4af37"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="#8a6a14" stroke-width="1.6"/><path d="M12 7.5v9M9.5 9.5h5M9.5 14.5h5" stroke="#8a6a14" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span id="goldNum" class="font-cinzel text-2xl font-bold gold-text">0</span>
+    </div>
+    <div class="flex items-center justify-end gap-2 mt-1.5 text-[11px] tracking-widest text-amber-100/60">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbbd93" stroke-width="2"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9c0-3 4-5 9-5s9 2 9 5"/><circle cx="12" cy="14" r="1.6" fill="#cbbd93" stroke="none"/></svg>
+      <span id="chestNum">0 / 14</span>
+      <span id="modeBadge" class="ml-2 px-2 py-0.5 border border-amber-200/30 rounded-sm text-amber-100/70">NORMAL</span>
+    </div>
+  </div>
+  <div class="absolute bottom-5 left-6 text-[11px] tracking-widest text-white/30">WASD MOVE &nbsp;·&nbsp; MOUSE LOOK &nbsp;·&nbsp; CLICK / E OPEN &nbsp;·&nbsp; M MUTE</div>
+  <div id="muteTag" class="absolute bottom-5 right-6 text-[11px] tracking-widest text-white/30 hidden-screen">MUTED</div>
+</div>
+
+<!-- crosshair + prompt -->
+<div id="crosshair" class="hidden-screen"><div id="chRing"></div><div id="chDot"></div></div>
+<div id="prompt" class="fixed left-1/2 top-[58%] -translate-x-1/2 z-30 pointer-events-none opacity-0">
+  <span class="font-cinzel text-sm tracking-[.3em] text-amber-100/90" style="text-shadow:0 0 12px rgba(212,175,55,.6)">OPEN</span>
+</div>
+
+<div id="floats" class="fixed inset-0 z-40 pointer-events-none overflow-hidden"></div>
+<div id="fader" class="fixed inset-0 z-[60] pointer-events-none"></div>
+
+<!-- ============ START SCREEN ============ -->
+<div id="menu" class="screen">
+  <div class="screen-bg absolute inset-0"></div>
+  <div class="relative text-center px-6 max-w-2xl w-full">
+    <p class="font-cinzel tracking-[.45em] text-amber-200/60 text-xs mb-3">A DUNGEON OF LIARS</p>
+    <h1 class="font-cinzel font-black text-6xl md:text-7xl gold-text title-glow leading-none">MIMIC<br>VAULT</h1>
+    <div class="flex items-center justify-center gap-3 my-5 opacity-70">
+      <div class="h-px w-20 bg-gradient-to-r from-transparent to-amber-400/60"></div>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="#d4af37"><path d="M12 2C7 2 3 6 3 11c0 3 1.6 5.4 4 6.8V21a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3.2c2.4-1.4 4-3.8 4-6.8 0-5-4-9-9-9zM8.5 13a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm7 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>
+      <div class="h-px w-20 bg-gradient-to-l from-transparent to-amber-400/60"></div>
+    </div>
+    <p class="text-amber-50/70 text-sm mb-1">Fourteen chests line the vault. Some hold gold. Some hold teeth.</p>
+    <p class="text-amber-50/45 text-xs italic mb-6">Watch them closely before you touch — the false ones cannot sit still.</p>
+
+    <div class="panel rounded-md px-6 py-4 mb-6 inline-block min-w-72">
+      <p class="font-cinzel text-[11px] tracking-[.35em] text-amber-200/50 mb-1">BEST DELVE</p>
+      <p id="bestGold" class="font-cinzel text-3xl font-bold gold-text">—</p>
+      <p id="bestMeta" class="text-[11px] tracking-widest text-amber-100/50 mt-1">NO DELVES YET — THE VAULT AWAITS</p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 mb-7 text-left">
+      <div id="modeNormal" class="mode-card sel rounded-md p-4">
+        <p class="font-cinzel font-bold tracking-widest text-amber-100 text-sm mb-1">NORMAL</p>
+        <p class="text-[12px] text-white/50 leading-relaxed">Subtle tells. Read the wood, the seam of the lid, the stillness.</p>
+      </div>
+      <div id="modeForgiving" class="mode-card rounded-md p-4">
+        <p class="font-cinzel font-bold tracking-widest text-amber-100 text-sm mb-1">FORGIVING</p>
+        <p class="text-[12px] text-white/50 leading-relaxed">Exaggerated tells — mimics rattle, glow red and bare their fangs.</p>
+      </div>
+    </div>
+
+    <button id="startBtn" class="btn-gold text-lg px-12 py-3.5 rounded-sm">ENTER THE VAULT</button>
+  </div>
+</div>
+
+<!-- ============ END SCREEN ============ -->
+<div id="endScreen" class="screen hidden-screen">
+  <div class="screen-bg absolute inset-0"></div>
+  <div class="relative text-center px-6 max-w-xl w-full">
+    <p id="endSub" class="font-cinzel tracking-[.4em] text-amber-200/60 text-xs mb-3">THE RUN ENDS</p>
+    <h1 id="endTitle" class="font-cinzel font-black text-5xl md:text-6xl gold-text title-glow mb-2">THE VAULT CLAIMS YOU</h1>
+    <p id="endNote" class="text-white/50 text-sm mb-6"></p>
+    <div id="newBest" class="hidden-screen mb-5">
+      <span class="font-cinzel tracking-[.3em] text-sm text-amber-300 px-4 py-1.5 border border-amber-400/60 rounded-sm" style="box-shadow:0 0 24px rgba(212,175,55,.35)">NEW BEST DELVE</span>
+    </div>
+    <div class="grid grid-cols-3 gap-3 mb-8">
+      <div class="stat-box rounded-md py-4">
+        <p class="font-cinzel text-[10px] tracking-[.3em] text-amber-200/50 mb-1">GOLD</p>
+        <p id="statGold" class="font-cinzel text-3xl font-bold gold-text">0</p>
+      </div>
+      <div class="stat-box rounded-md py-4">
+        <p class="font-cinzel text-[10px] tracking-[.3em] text-amber-200/50 mb-1">CHESTS</p>
+        <p id="statChests" class="font-cinzel text-3xl font-bold text-amber-50/90">0</p>
+      </div>
+      <div class="stat-box rounded-md py-4">
+        <p class="font-cinzel text-[10px] tracking-[.3em] text-amber-200/50 mb-1">MIMICS</p>
+        <p id="statMimics" class="font-cinzel text-3xl font-bold text-red-400/90">0</p>
+      </div>
+    </div>
+    <div class="flex items-center justify-center gap-4">
+      <button id="againBtn" class="btn-gold px-10 py-3 rounded-sm">DELVE AGAIN</button>
+      <button id="menuBtn" class="btn-ghost px-8 py-3 rounded-sm">MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PAUSE ============ -->
+<div id="pause" class="screen hidden-screen">
+  <div class="absolute inset-0 bg-black/60" style="backdrop-filter:blur(4px)"></div>
+  <div class="relative text-center">
+    <p class="font-cinzel tracking-[.4em] text-amber-100/80 text-xl mb-6">PAUSED</p>
+    <button id="resumeBtn" class="btn-gold px-10 py-3 rounded-sm">CONTINUE</button>
+  </div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   MIMIC VAULT — a first-person dungeon of liars
+   ============================================================ */
+const el = id => document.getElementById(id);
+const clamp = THREE.MathUtils.clamp;
+const lerp = THREE.MathUtils.lerp;
+const smooth = t => t*t*(3-2*t);
+const rand = (a,b) => a + Math.random()*(b-a);
+
+/* ---------------- state ---------------- */
+let scene, camera, renderer, clock;
+let state = 'menu';               // menu | playing | dying | over
+let mode = localStorage.getItem('mimicvault_mode') || 'normal';
+let best = null;
+try { best = JSON.parse(localStorage.getItem('mimicvault_best') || 'null'); } catch(e){ best = null; }
+
+let hp = 100, gold = 0, openedCount = 0, mimicsSprung = 0, totalChests = 14, allOpened = false;
+let yaw = 0, pitch = 0, locked = false, hovered = null, trauma = 0, bobT = 0, time = 0, nextBeat = 0;
+let chests = [], hitTargets = [], bursts = [], torches = [];
+let dust, dustBase, dustPhase;
+let portalMat, portalLight, portalOn = false;
+const playerPos = new THREE.Vector3(0, 1.6, 3.2);
+const vel = new THREE.Vector3();
+const keys = {};
+const raycaster = new THREE.Raycaster();
+raycaster.far = 4.4;
+
+/* ============================================================
+   TEXTURES — all procedural canvas work
+   ============================================================ */
+function shade(hex, f){
+  const n = parseInt(hex.slice(1), 16);
+  const r = clamp(((n>>16)&255)*f, 0, 255)|0, g = clamp(((n>>8)&255)*f, 0, 255)|0, b = clamp((n&255)*f, 0, 255)|0;
+  return `rgb(${r},${g},${b})`;
+}
+function canvasTex(size, draw, rx=1, ry=1){
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+function drawStone(ctx, s, base, mortar, rows, cols){
+  ctx.fillStyle = mortar; ctx.fillRect(0,0,s,s);
+  const bh = s/rows, bw = s/cols;
+  for(let r=0;r<rows;r++){
+    const off = (r%2)*bw/2;
+    for(let cI=-1;cI<cols+1;cI++){
+      const x = cI*bw+off, y = r*bh, l = rand(.72,1.12);
+      ctx.fillStyle = shade(base, l);
+      ctx.fillRect(x+2.5, y+2.5, bw-5, bh-5);
+      ctx.fillStyle = 'rgba(255,255,255,.05)';
+      ctx.fillRect(x+2.5, y+2.5, bw-5, 2);
+      ctx.fillStyle = 'rgba(0,0,0,.18)';
+      ctx.fillRect(x+2.5, y+bh-4.5, bw-5, 2);
+      for(let k=0;k<14;k++){
+        ctx.fillStyle = Math.random()<.5 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.06)';
+        ctx.fillRect(x+rand(4,bw-6), y+rand(4,bh-6), rand(1,3), rand(1,3));
+      }
+    }
+  }
+}
+function drawFloor(ctx, s){
+  ctx.fillStyle = '#191720'; ctx.fillRect(0,0,s,s);
+  const n = 4, w = s/n;
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){
+    ctx.fillStyle = shade('#3a3742', rand(.7,1.1));
+    ctx.fillRect(i*w+3, j*w+3, w-6, w-6);
+    for(let k=0;k<26;k++){
+      ctx.fillStyle = Math.random()<.5?'rgba(0,0,0,.14)':'rgba(255,255,255,.05)';
+      ctx.fillRect(i*w+rand(5,w-8), j*w+rand(5,w-8), rand(1,4), rand(1,4));
+    }
+    if(Math.random()<.6){
+      ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1.2; ctx.beginPath();
+      let x = i*w+rand(10,w-10), y = j*w+8;
+      ctx.moveTo(x,y);
+      for(let k=0;k<4;k++){ x += rand(-16,16); y += rand(8,22); ctx.lineTo(x,y); }
+      ctx.stroke();
+    }
+  }
+}
+function drawWood(ctx, s){
+  ctx.fillStyle = '#6b4a2e'; ctx.fillRect(0,0,s,s);
+  const rows = 5, ph = s/rows;
+  for(let r=0;r<rows;r++){
+    ctx.fillStyle = shade('#7a5433', rand(.8,1.15));
+    ctx.fillRect(0, r*ph+1.5, s, ph-3);
+    ctx.strokeStyle = 'rgba(40,22,10,.5)'; ctx.lineWidth = 1;
+    for(let g=0;g<7;g++){
+      ctx.beginPath();
+      const gy = r*ph + rand(5, ph-5);
+      ctx.moveTo(0, gy);
+      for(let x=0;x<=s;x+=32) ctx.lineTo(x, gy + Math.sin(x*.02+g)*2.5);
+      ctx.stroke();
+    }
+    if(Math.random()<.8){
+      const kx = rand(20,s-20), ky = r*ph+ph/2;
+      ctx.strokeStyle = 'rgba(45,25,10,.6)';
+      for(let rr=2;rr<9;rr+=2.4){ ctx.beginPath(); ctx.ellipse(kx,ky,rr*1.6,rr,0,0,Math.PI*2); ctx.stroke(); }
+    }
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(0, r*ph, s, 2);
+  }
+}
+function radialTex(size, stops){
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+  for(const [o,col] of stops) g.addColorStop(o,col);
+  ctx.fillStyle = g; ctx.fillRect(0,0,size,size);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+let woodTex, glowTex, flameTex;
+
+/* ============================================================
+   AUDIO — tiny procedural synth
+   ============================================================ */
+let actx = null, master = null, noiseBuf = null, muted = false;
+function audioInit(){
+  if(actx) { if(actx.state === 'suspended') actx.resume(); return; }
+  try{
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain(); master.gain.value = muted ? 0 : .5; master.connect(actx.destination);
+    noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+  }catch(e){}
+}
+function tone(freq, dur, type='sine', vol=.2, slideTo=null, when=0){
+  if(!actx || muted) return;
+  const t0 = actx.currentTime + when;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t0);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20,slideTo), t0+dur);
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0+.012);
+  g.gain.exponentialRampToValueAtTime(.0001, t0+dur);
+  o.connect(g); g.connect(master); o.start(t0); o.stop(t0+dur+.05);
+}
+function noiseHit(dur, vol, f0, f1, when=0){
+  if(!actx || muted) return;
+  const t0 = actx.currentTime + when;
+  const src = actx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+  bp.frequency.setValueAtTime(f0, t0);
+  bp.frequency.exponentialRampToValueAtTime(Math.max(40,f1), t0+dur);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0+.02);
+  g.gain.exponentialRampToValueAtTime(.0001, t0+dur);
+  src.connect(bp); bp.connect(g); g.connect(master);
+  src.start(t0); src.stop(t0+dur+.05);
+}
+const sfx = {
+  creak(){ tone(rand(120,160), .5, 'sawtooth', .06, 60); noiseHit(.35, .04, 900, 300); },
+  chime(){ tone(987,.5,'triangle',.16); tone(1318,.7,'triangle',.12,null,.07); tone(1975,.9,'sine',.06,null,.13); },
+  coin(){ tone(1567,.07,'square',.07); tone(2093,.14,'square',.06,null,.06); },
+  roar(){ noiseHit(.7,.4,700,140); tone(65,.7,'sawtooth',.3,38); tone(92,.5,'square',.12,50,.05); },
+  snap(){ noiseHit(.09,.22,1800,500); tone(220,.08,'square',.1,90); },
+  hurt(){ tone(190,.25,'sawtooth',.22,80); noiseHit(.2,.15,500,150); },
+  heal(){ tone(523,.3,'sine',.1); tone(784,.4,'sine',.09,null,.09); },
+  thump(){ tone(56,.13,'sine',.4,40); tone(52,.11,'sine',.3,38,.16); },
+  rattle(){ noiseHit(.16,.07,2400,900); },
+  ui(){ tone(660,.06,'square',.07); },
+  dodge(){ tone(880,.2,'sine',.08,1400); },
+  portal(){ tone(392,.8,'sine',.12); tone(587,.9,'sine',.1,null,.12); tone(880,1.1,'sine',.08,null,.24); },
+  death(){ tone(220,1.4,'sawtooth',.2,50); noiseHit(1.2,.2,400,60); }
+};
+
+/* ============================================================
+   SCENE SETUP
+   ============================================================ */
+function initScene(){
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  el('app').appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x060409);
+  scene.fog = new THREE.FogExp2(0x060409, 0.046);
+
+  camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, .1, 90);
+  camera.rotation.order = 'YXZ';
+
+  scene.add(new THREE.HemisphereLight(0x3a3350, 0x0c0806, .55));
+
+  woodTex = canvasTex(256, drawWood, 1, 1);
+  glowTex = radialTex(64, [[0,'rgba(255,255,255,1)'],[.35,'rgba(255,255,255,.5)'],[1,'rgba(255,255,255,0)']]);
+  flameTex = radialTex(64, [[0,'rgba(255,250,220,1)'],[.25,'rgba(255,190,80,.95)'],[.6,'rgba(255,110,20,.5)'],[1,'rgba(255,60,0,0)']]);
+
+  buildRoom();
+  buildDust();
+}
+
+function buildRoom(){
+  const wallTex  = canvasTex(512, (c,s)=>drawStone(c,s,'#5d5f6e','#23222b',8,4), 12, 1);
+  const wallTex2 = canvasTex(512, (c,s)=>drawStone(c,s,'#545664','#201f27',8,4), 3, 1);
+  const floorTex = canvasTex(512, drawFloor, 3, 16);
+  const ceilTex  = canvasTex(512, (c,s)=>drawStone(c,s,'#413f4c','#191820',6,4), 3, 12);
+
+  const floorMat = new THREE.MeshStandardMaterial({ map:floorTex, roughness:.95 });
+  const wallMat  = new THREE.MeshStandardMaterial({ map:wallTex, roughness:.9 });
+  const wallMat2 = new THREE.MeshStandardMaterial({ map:wallTex2, roughness:.9 });
+  const ceilMat  = new THREE.MeshStandardMaterial({ map:ceilTex, roughness:.95 });
+  const darkMat  = new THREE.MeshStandardMaterial({ color:0x2a2733, roughness:.9 });
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(7, 54), floorMat);
+  floor.rotation.x = -Math.PI/2; floor.position.set(0,0,-20); scene.add(floor);
+
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(7, 54), ceilMat);
+  ceil.rotation.x = Math.PI/2; ceil.position.set(0,3.4,-20); scene.add(ceil);
+
+  for(const side of [-1,1]){
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(54, 3.4), wallMat);
+    w.rotation.y = side < 0 ? Math.PI/2 : -Math.PI/2;
+    w.position.set(side*3.05, 1.7, -20); scene.add(w);
+  }
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(7, 3.4), wallMat2);
+  back.rotation.y = Math.PI; back.position.set(0,1.7,6); scene.add(back);
+
+  // far wall with a doorway
+  const mkEnd = (w,h,x,y) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w,h), wallMat2); m.position.set(x,y,-46); scene.add(m); };
+  mkEnd(2.7,3.4,-2.15,1.7); mkEnd(2.7,3.4,2.15,1.7); mkEnd(1.6,1.0,0,2.9);
+
+  // door frame
+  const post = new THREE.BoxGeometry(.28, 2.7, .4);
+  for(const side of [-1,1]){
+    const p = new THREE.Mesh(post, darkMat); p.position.set(side*.98, 1.35, -45.9); scene.add(p);
+  }
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(2.3,.3,.4), darkMat);
+  lintel.position.set(0,2.55,-45.9); scene.add(lintel);
+
+  // portal shimmer
+  portalMat = new THREE.MeshBasicMaterial({ map:glowTex, color:0x3b6cff, transparent:true, opacity:.5, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide });
+  const portal = new THREE.Mesh(new THREE.PlaneGeometry(1.66, 2.42), portalMat);
+  portal.position.set(0, 1.25, -45.75); scene.add(portal);
+  portalLight = new THREE.PointLight(0x5588ff, 9, 8, 2);
+  portalLight.position.set(0, 1.5, -44.6); scene.add(portalLight);
+
+  // ceiling beams
+  const beamGeo = new THREE.BoxGeometry(6.4, .26, .34);
+  const beamMat = new THREE.MeshStandardMaterial({ map:woodTex, color:0x8a7a6a, roughness:.9 });
+  for(let i=0;i<5;i++){
+    const b = new THREE.Mesh(beamGeo, beamMat);
+    b.position.set(0, 3.26, -4 - i*9.2); scene.add(b);
+  }
+
+  // torches
+  const brackGeo = new THREE.CylinderGeometry(.035,.05,.5,8);
+  const brackMat = new THREE.MeshStandardMaterial({ color:0x1c1a20, roughness:.6, metalness:.6 });
+  const torchZ = [-3,-11,-19,-27,-35,-43];
+  torchZ.forEach((z,i) => {
+    const side = i%2 === 0 ? -1 : 1;
+    const g = new THREE.Group();
+    g.position.set(side*2.86, 2.15, z);
+    const br = new THREE.Mesh(brackGeo, brackMat);
+    br.rotation.z = side*.5; br.position.x = side*.08; g.add(br);
+    const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map:flameTex, color:0xffaa44, blending:THREE.AdditiveBlending, depthWrite:false }));
+    flame.scale.set(.55,.85,1); flame.position.set(side*-.12,.28,0); g.add(flame);
+    const light = new THREE.PointLight(0xff8033, 14, 12, 2);
+    light.position.set(side*-.2,.35,0); g.add(light);
+    scene.add(g);
+    torches.push({ light, flame, phase: Math.random()*20 });
+  });
+}
+
+function buildDust(){
+  const n = 260;
+  const pos = new Float32Array(n*3);
+  dustBase = new Float32Array(n*3); dustPhase = new Float32Array(n);
+  for(let i=0;i<n;i++){
+    dustBase[i*3]   = rand(-2.8,2.8);
+    dustBase[i*3+1] = rand(.2,3.1);
+    dustBase[i*3+2] = rand(-44,4);
+    dustPhase[i] = Math.random()*20;
+    pos.set([dustBase[i*3],dustBase[i*3+1],dustBase[i*3+2]], i*3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  dust = new THREE.Points(geo, new THREE.PointsMaterial({ color:0x9988bb, size:.045, transparent:true, opacity:.32, blending:THREE.AdditiveBlending, depthWrite:false, map:glowTex }));
+  scene.add(dust);
+}
+
+/* ============================================================
+   CHESTS
+   ============================================================ */
+const G = {
+  body:  new THREE.BoxGeometry(1.2,.5,.8),
+  trim:  new THREE.BoxGeometry(1.26,.09,.86),
+  rim:   new THREE.BoxGeometry(1.24,.07,.84),
+  band:  new THREE.BoxGeometry(.1,.52,.84),
+  lock:  new THREE.BoxGeometry(.17,.21,.05),
+  lidStrip: new THREE.BoxGeometry(1.24,.07,.07),
+  tooth: new THREE.ConeGeometry(.036,.13,6),
+  peek:  new THREE.ConeGeometry(.028,.1,5),
+  coin:  new THREE.CylinderGeometry(.09,.09,.032,12),
+  gem:   new THREE.OctahedronGeometry(.06),
+  seam:  new THREE.PlaneGeometry(1.14,.06),
+  glint: new THREE.CircleGeometry(.023,10),
+  mouth: new THREE.PlaneGeometry(1.06,.64),
+  inner: new THREE.BoxGeometry(1.1,.04,.7),
+  tongue:new THREE.BoxGeometry(.32,.03,.5),
+  eyeW:  new THREE.SphereGeometry(.05,10,10),
+  eyeP:  new THREE.SphereGeometry(.022,8,8),
+};
+G.lid = new THREE.CylinderGeometry(.4,.4,1.2,18,1,false,0,Math.PI); G.lid.rotateZ(Math.PI/2);
+G.lidBand = new THREE.CylinderGeometry(.425,.425,.1,14,1,true,0,Math.PI); G.lidBand.rotateZ(Math.PI/2);
+
+const teethMat = new THREE.MeshStandardMaterial({ color:0xefe6cc, roughness:.4 });
+const tongueMat = new THREE.MeshStandardMaterial({ color:0x9e2438, roughness:.6 });
+const mouthMat = new THREE.MeshStandardMaterial({ color:0x3d0a10, roughness:.9, emissive:0x57060c, emissiveIntensity:.5 });
+const innerMat = new THREE.MeshStandardMaterial({ color:0x120b08, roughness:1 });
+const goldMat = new THREE.MeshStandardMaterial({ color:0xe8b93c, metalness:.9, roughness:.28, emissive:0x5a3c00, emissiveIntensity:.4 });
+const gemMatA = new THREE.MeshStandardMaterial({ color:0x37e0c8, metalness:.4, roughness:.2, emissive:0x0a5a50, emissiveIntensity:.8 });
+const gemMatB = new THREE.MeshStandardMaterial({ color:0xc44df0, metalness:.4, roughness:.2, emissive:0x4a0a60, emissiveIntensity:.8 });
+const eyeWMat = new THREE.MeshBasicMaterial({ color:0xffe9b8 });
+const eyePMat = new THREE.MeshBasicMaterial({ color:0x0a0a0a });
+
+function makeChest(isMimic, x, z, ry){
+  const F = mode === 'forgiving';
+  const g = new THREE.Group();
+  g.position.set(x,0,z); g.rotation.y = ry;
+
+  const wood = new THREE.MeshStandardMaterial({ map:woodTex, color: isMimic ? 0xd6b7c2 : 0xffffff, roughness:.85, metalness:.05 });
+  const metal = new THREE.MeshStandardMaterial({ color: isMimic ? 0x94996b : 0xd9b25c, metalness:.75, roughness:.35 });
+
+  const c = {
+    group:g, isMimic, wood, metal,
+    opened:false, attack:false, sprung:false,
+    phase: Math.random()*20,
+    origPos: new THREE.Vector3(x,0,z),
+    pos: new THREE.Vector3(x,0,z),
+    baseRy: ry, openT: 0, attackT: 0, dmgDone:false, lastChomp:-1,
+    nextRattle: rand(2,6), rattleT: 0, nextBlink: rand(2,6), blinkT: 0
+  };
+
+  const add = (geo, mat, x2,y2,z2, parent=g, clickable=true) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x2,y2,z2);
+    m.userData.chest = c;
+    parent.add(m);
+    if(clickable) hitTargets.push(m);
+    return m;
+  };
+
+  add(G.body, wood, 0,.28,0);
+  add(G.trim, wood, 0,.045,0);
+  add(G.rim, wood, 0,.5,0);
+  add(G.band, metal, -.38,.28,0);
+  add(G.band, metal, .38,.28,0);
+  add(G.inner, innerMat, 0,.545,0, g, false);
+
+  // lid on a rear hinge
+  const lidPivot = new THREE.Group();
+  lidPivot.position.set(0,.5,-.4); g.add(lidPivot);
+  add(G.lid, wood, 0,0,.4, lidPivot);
+  add(G.lidBand, metal, -.38,0,.4, lidPivot, false);
+  add(G.lidBand, metal, .38,0,.4, lidPivot, false);
+  add(G.lidStrip, metal, 0,.03,.79, lidPivot, false);
+  c.lidPivot = lidPivot;
+
+  // lock + keyhole glint (honest chests only — a mimic's lock hides an eye) + hidden eye
+  add(G.lock, metal, 0,.42,.425);
+  if(!isMimic){
+    c.keyGlint = add(G.glint, new THREE.MeshBasicMaterial({ color:0xffd970, transparent:true, opacity:.3, blending:THREE.AdditiveBlending, depthWrite:false }), 0,.395,.455, g, false);
+  }
+  const eye = new THREE.Group(); eye.position.set(0,.462,.45);
+  const ew = new THREE.Mesh(G.eyeW, eyeWMat); ew.scale.set(1,.72,.6);
+  const ep = new THREE.Mesh(G.eyeP, eyePMat); ep.position.set(0,0,.035);
+  eye.add(ew); eye.add(ep); eye.scale.setScalar(0); g.add(eye);
+  c.eye = eye; c.pupil = ep;
+
+  // seam glow — the core read: gold = honest, red = liar
+  c.seam = add(G.seam, new THREE.MeshBasicMaterial({ color: isMimic?0xff2a1a:0xffc04d, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide }), 0,.502,.432, g, false);
+
+  // mimic innards — geometry hides them until the lid moves
+  if(isMimic){
+    add(G.mouth, mouthMat, 0,.552,0, g, false).rotation.x = -Math.PI/2;
+    for(let i=0;i<8;i++){
+      add(G.tooth, teethMat, -.49+i*.14, .53, .30, g, false);
+      const t = add(G.tooth, teethMat, -.49+i*.14, -.01, .70, lidPivot, false);
+      t.rotation.x = Math.PI;
+    }
+    c.tongue = add(G.tongue, tongueMat, 0,.44,.52, g, false);
+    c.tongue.rotation.x = .55; c.tongue.visible = false;
+    // forgiving: fangs jut through the seam
+    c.peek = new THREE.Group();
+    for(const px of [-.18,0,.18]){
+      const p = new THREE.Mesh(G.peek, teethMat);
+      p.position.set(px,.53,.43); p.rotation.x = 2.1;
+      c.peek.add(p);
+    }
+    c.peek.visible = F;
+    g.add(c.peek);
+  } else {
+    // gold hoard
+    const hoard = new THREE.Group();
+    for(let i=0;i<7;i++){
+      const coin = new THREE.Mesh(G.coin, goldMat);
+      coin.position.set(rand(-.4,.4), .565 + (i%3)*.034, rand(-.22,.22));
+      coin.rotation.y = Math.random()*3;
+      hoard.add(coin);
+    }
+    const g1 = new THREE.Mesh(G.gem, gemMatA); g1.position.set(.28,.60,.1); hoard.add(g1);
+    const g2 = new THREE.Mesh(G.gem, gemMatB); g2.position.set(-.3,.59,-.08); hoard.add(g2);
+    g.add(hoard);
+    c.glowPlane = add(G.seam, new THREE.MeshBasicMaterial({ color:0xffd24d, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide }), 0,.68,0, g, false);
+    c.glowPlane.rotation.x = -Math.PI/2;
+    // forgiving: idle sparkles
+    const sn = 7, sp = new Float32Array(sn*3);
+    for(let i=0;i<sn;i++) sp.set([rand(-.5,.5), rand(.7,1.25), rand(-.3,.35)], i*3);
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(sp,3));
+    c.sparkles = new THREE.Points(sg, new THREE.PointsMaterial({ color:0xffd970, size:.07, transparent:true, opacity:.9, blending:THREE.AdditiveBlending, depthWrite:false, map:glowTex }));
+    c.sparkles.visible = F;
+    g.add(c.sparkles);
+  }
+
+  c.aura = new THREE.PointLight(isMimic?0xff2418:0xffb84d, 0, 3.8, 2);
+  c.aura.position.set(0,.75,.35);
+  c.aura.visible = F;
+  g.add(c.aura);
+
+  scene.add(g);
+  return c;
+}
+
+function buildChests(){
+  for(const c of chests) scene.remove(c.group);
+  chests = []; hitTargets = [];
+
+  const nMimic = 5 + Math.floor(Math.random()*3);      // 5–7 liars
+  const flags = new Array(totalChests).fill(false);
+  let placed = 0;
+  while(placed < nMimic){
+    const i = Math.floor(Math.random()*totalChests);
+    if(!flags[i]){ flags[i] = true; placed++; }
+  }
+  let idx = 0;
+  for(let i=0;i<7;i++){
+    const z = -6 - i*4.6;
+    chests.push(makeChest(flags[idx++], -2.25, z, Math.PI/2));
+    chests.push(makeChest(flags[idx++],  2.25, z, -Math.PI/2));
+  }
+}
+
+/* ============================================================
+   PARTICLE BURSTS
+   ============================================================ */
+function burst(pos, color, n=42, speed=2.6, size=.085, life=.9){
+  const positions = new Float32Array(n*3), vels = [];
+  for(let i=0;i<n;i++){
+    positions.set([pos.x,pos.y,pos.z], i*3);
+    const a = Math.random()*Math.PI*2, e = rand(.2,1.4), s = rand(.4,1)*speed;
+    vels.push(new THREE.Vector3(Math.cos(a)*Math.cos(e)*s, Math.sin(e)*s, Math.sin(a)*Math.cos(e)*s));
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  const mat = new THREE.PointsMaterial({ color, size, transparent:true, opacity:1, blending:THREE.AdditiveBlending, depthWrite:false, map:glowTex });
+  const pts = new THREE.Points(geo, mat);
+  scene.add(pts);
+  bursts.push({ pts, vels, life, maxLife:life });
+}
+function updateBursts(dt){
+  for(let i=bursts.length-1;i>=0;i--){
+    const b = bursts[i];
+    b.life -= dt;
+    if(b.life <= 0){
+      scene.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose();
+      bursts.splice(i,1); continue;
+    }
+    const arr = b.pts.geometry.attributes.position.array;
+    for(let j=0;j<b.vels.length;j++){
+      const v = b.vels[j];
+      v.y -= 5.5*dt;
+      arr[j*3] += v.x*dt; arr[j*3+1] += v.y*dt; arr[j*3+2] += v.z*dt;
+      if(arr[j*3+1] < .02){ arr[j*3+1] = .02; v.y *= -.3; v.x *= .7; v.z *= .7; }
+    }
+    b.pts.geometry.attributes.position.needsUpdate = true;
+    b.pts.material.opacity = b.life / b.maxLife;
+  }
+}
+
+/* ============================================================
+   UI HELPERS
+   ============================================================ */
+function updateHUD(){
+  el('hpFill').style.width = hp + '%';
+  el('hpNum').textContent = Math.ceil(hp);
+  el('goldNum').textContent = gold;
+  el('chestNum').textContent = openedCount + ' / ' + totalChests;
+  el('lowHp').classList.toggle('on', hp > 0 && hp <= 30);
+}
+function spawnFloat(txt, color){
+  const d = document.createElement('div');
+  d.className = 'float-txt';
+  d.textContent = txt;
+  d.style.color = color;
+  d.style.left = `calc(50% + ${rand(-70,70)|0}px)`;
+  el('floats').appendChild(d);
+  setTimeout(()=>d.remove(), 1200);
+}
+function flash(id, peak){
+  const f = el(id);
+  f.style.transition = 'none'; f.style.opacity = peak;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    f.style.transition = ''; f.style.opacity = 0;
+  }));
+}
+function showScreen(name){
+  for(const s of ['menu','endScreen']) el(s).classList.add('hidden-screen');
+  el('hud').classList.toggle('hidden-screen', !(name === null));
+  el('crosshair').classList.toggle('hidden-screen', !(name === null));
+  if(name) el(name).classList.remove('hidden-screen');
+}
+function updateBestUI(){
+  if(best){
+    el('bestGold').textContent = best.gold + ' GOLD';
+    el('bestMeta').textContent = `${best.chests} CHESTS · ${best.escaped ? 'ESCAPED' : 'PERISHED'} · ${String(best.mode||'normal').toUpperCase()}`;
+  } else {
+    el('bestGold').textContent = '—';
+    el('bestMeta').textContent = 'NO DELVES YET — THE VAULT AWAITS';
+  }
+}
+function fadeBlack(cb){
+  const f = el('fader');
+  f.style.opacity = 1;
+  setTimeout(()=>{ cb(); f.style.opacity = 0; }, 320);
+}
+
+/* ============================================================
+   GAME LOGIC
+   ============================================================ */
+function damage(amount){
+  if(state !== 'playing' || hp <= 0) return;
+  hp = Math.max(0, hp - amount);
+  trauma = Math.min(1, trauma + .7);
+  flash('dmgFlash', .95);
+  sfx.hurt();
+  spawnFloat('-' + amount + ' HP', '#ff5a4d');
+  updateHUD();
+  if(hp <= 0){
+    state = 'dying';
+    el('deathFade').style.opacity = .95;
+    sfx.death();
+    setTimeout(()=>{ el('deathFade').style.opacity = 0; endRun(false); }, 1500);
+  }
+}
+function heal(amount){
+  hp = Math.min(100, hp + amount);
+  flash('healFlash', .8);
+  sfx.heal();
+  spawnFloat('+' + amount + ' HP', '#7dffa0');
+  updateHUD();
+}
+
+function openChest(c){
+  if(c.opened || state !== 'playing') return;
+  c.opened = true; openedCount++;
+  c.seam.material.opacity = 0;
+  if(c.peek) c.peek.visible = false;
+  if(hovered === c){ hovered = null; setPrompt(false); }
+
+  if(c.isMimic){
+    mimicsSprung++;
+    c.attack = true; c.attackT = 0; c.dmgDone = false; c.lastChomp = -1;
+    c.targetYaw = Math.atan2(playerPos.x - c.pos.x, playerPos.z - c.pos.z);
+    c.eye.scale.setScalar(1.35);
+    c.aura.visible = true;
+    sfx.creak(); sfx.roar();
+  } else {
+    c.openT = 0;
+    if(c.sparkles) c.sparkles.visible = false;
+    c.aura.visible = true;
+    sfx.creak(); sfx.chime(); sfx.coin();
+    const n = 15 + Math.floor(Math.random()*36);
+    gold += n;
+    spawnFloat('+' + n + ' GOLD', '#ffd66b');
+    const wp = c.group.position.clone().add(new THREE.Vector3(0,.8,.3).applyAxisAngle(new THREE.Vector3(0,1,0), c.group.rotation.y));
+    burst(wp, 0xffd24d, 46, 2.6);
+    burst(wp, 0xfff2c0, 18, 1.4, .06, .6);
+    if(Math.random() < .25 && hp < 100) setTimeout(()=>{ if(state==='playing') heal(10 + Math.floor(Math.random()*8)); }, 450);
+  }
+  updateHUD();
+  if(openedCount === totalChests){
+    allOpened = true; portalOn = true;
+    spawnFloat('THE VAULT IS EMPTY — REACH THE EXIT', '#9fd8ff');
+    sfx.portal();
+  }
+}
+
+function tryOpen(){
+  if(state === 'playing' && hovered && !hovered.opened) openChest(hovered);
+}
+function setPrompt(on){
+  el('crosshair').classList.toggle('on', on);
+  el('prompt').style.opacity = on ? 1 : 0;
+}
+
+function endRun(escaped){
+  state = 'over';
+  if(hovered){ hovered.wood.emissive.setHex(0x000000); hovered = null; }
+  setPrompt(false);
+  if(document.pointerLockElement) document.exitPointerLock();
+  let note = '';
+  if(escaped){
+    gold += 50;
+    note = allOpened ? 'Every chest emptied. Flawless. +50 escape bonus.' : 'You slip out with what you carry. +50 escape bonus.';
+    sfx.portal();
+  } else {
+    note = 'The last thing you felt was teeth.';
+  }
+  const isBest = !best || gold > best.gold;
+  if(isBest){
+    best = { gold, chests: openedCount, mimics: mimicsSprung, escaped, mode };
+    localStorage.setItem('mimicvault_best', JSON.stringify(best));
+  }
+  el('endTitle').textContent = escaped ? (allOpened ? 'VAULT CLEANSED' : 'YOU ESCAPE THE VAULT') : 'THE VAULT CLAIMS YOU';
+  el('endSub').textContent = escaped ? 'DELVE COMPLETE' : 'THE RUN ENDS';
+  el('endNote').textContent = note;
+  el('statGold').textContent = gold;
+  el('statChests').textContent = openedCount + ' / ' + totalChests;
+  el('statMimics').textContent = mimicsSprung;
+  el('newBest').classList.toggle('hidden-screen', !isBest);
+  updateBestUI();
+  showScreen('endScreen');
+}
+
+function startRun(){
+  audioInit();
+  fadeBlack(()=>{
+    buildChests();
+    for(const b of bursts){ scene.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); }
+    bursts = [];
+    el('floats').innerHTML = '';
+    hp = 100; gold = 0; openedCount = 0; mimicsSprung = 0; allOpened = false; portalOn = false;
+    trauma = 0; hovered = null; time = 0;
+    playerPos.set(0, 1.6, 3.2); vel.set(0,0,0); yaw = 0; pitch = 0;
+    portalMat.color.setHex(0x3b6cff); portalLight.color.setHex(0x5588ff);
+    el('modeBadge').textContent = mode.toUpperCase();
+    updateHUD();
+    setPrompt(false);
+    state = 'playing';
+    showScreen(null);
+    lockPointer();
+  });
+}
+
+/* ============================================================
+   INPUT
+   ============================================================ */
+function lockPointer(){
+  try{
+    const r = renderer.domElement.requestPointerLock({ unadjustedMovement:true });
+    if(r && r.catch) r.catch(()=>{ try{ renderer.domElement.requestPointerLock(); }catch(e){} });
+  }catch(e){ try{ renderer.domElement.requestPointerLock(); }catch(e2){} }
+}
+document.addEventListener('pointerlockchange', ()=>{
+  locked = document.pointerLockElement === renderer.domElement;
+  if(!locked && state === 'playing') el('pause').classList.remove('hidden-screen');
+  else el('pause').classList.add('hidden-screen');
+});
+document.addEventListener('mousemove', e=>{
+  if(!locked || state !== 'playing') return;
+  yaw -= e.movementX * .0022;
+  pitch = clamp(pitch - e.movementY * .0022, -1.35, 1.35);
+});
+document.addEventListener('mousedown', e=>{
+  if(state === 'playing' && locked && e.button === 0) tryOpen();
+});
+addEventListener('keydown', e=>{
+  keys[e.code] = true;
+  if(e.code === 'KeyE') tryOpen();
+  if(e.code === 'KeyM'){
+    muted = !muted;
+    if(master) master.gain.value = muted ? 0 : .5;
+    el('muteTag').classList.toggle('hidden-screen', !muted);
+  }
+});
+addEventListener('keyup', e=> keys[e.code] = false);
+addEventListener('contextmenu', e=> e.preventDefault());
+
+el('startBtn').addEventListener('click', ()=>{ audioInit(); sfx.ui(); startRun(); });
+el('againBtn').addEventListener('click', ()=>{ audioInit(); sfx.ui(); startRun(); });
+el('menuBtn').addEventListener('click', ()=>{ audioInit(); sfx.ui(); state = 'menu'; showScreen('menu'); updateBestUI(); });
+el('resumeBtn').addEventListener('click', ()=>{ audioInit(); sfx.ui(); lockPointer(); });
+
+function setMode(m){
+  mode = m;
+  localStorage.setItem('mimicvault_mode', m);
+  el('modeNormal').classList.toggle('sel', m === 'normal');
+  el('modeForgiving').classList.toggle('sel', m === 'forgiving');
+  if(state === 'menu') buildChests();
+}
+el('modeNormal').addEventListener('click', ()=>{ audioInit(); sfx.ui(); setMode('normal'); });
+el('modeForgiving').addEventListener('click', ()=>{ audioInit(); sfx.ui(); setMode('forgiving'); });
+
+/* ============================================================
+   PER-FRAME CHEST ANIMATION
+   ============================================================ */
+const tmpV = new THREE.Vector3();
+function animChest(c, dt){
+  const F = mode === 'forgiving';
+  const ph = c.phase;
+
+  if(c.opened && !c.isMimic){
+    // honest chest — lid swings, gold glow blooms then settles
+    c.openT += dt;
+    const k = smooth(clamp(c.openT / .7, 0, 1));
+    c.lidPivot.rotation.x = -1.85 * k;
+    if(c.glowPlane) c.glowPlane.material.opacity = Math.min(.8, c.openT * 2) * clamp(1.6 - c.openT * .5, .25, 1);
+    c.aura.intensity = 9 * Math.max(0, 1 - c.openT / 1.6);
+    if(c.aura.intensity < .02) c.aura.visible = false;
+    return;
+  }
+
+  if(c.opened && c.isMimic){
+    if(c.attack){
+      c.attackT += dt;
+      const t = c.attackT;
+      // face the player
+      c.group.rotation.y += (c.targetYaw - c.group.rotation.y) * Math.min(1, dt * 10);
+      if(t < .15){
+        c.lidPivot.rotation.x = -1.5 * (t / .15);
+      }
+      // lunge
+      const p = clamp((t - .15) / .3, 0, 1);
+      if(p > 0 && !c.lungeDone){
+        const dir = tmpV.set(playerPos.x - c.origPos.x, 0, playerPos.z - c.origPos.z);
+        const dist = dir.length(); dir.normalize();
+        const reach = Math.max(0, Math.min(1.0, dist - 1.0));
+        const e = smooth(p);
+        c.pos.copy(c.origPos).addScaledVector(dir, reach * e);
+        c.group.position.x = c.pos.x;
+        c.group.position.z = c.pos.z;
+        c.group.position.y = Math.sin(e * Math.PI) * .3;
+        if(p >= 1){ c.lungeDone = true; c.group.position.y = 0; }
+      }
+      // bite check
+      if(!c.dmgDone && t >= .45){
+        c.dmgDone = true;
+        const d = Math.hypot(playerPos.x - c.pos.x, playerPos.z - c.pos.z);
+        if(d < 3.8){
+          damage(16 + Math.floor(Math.random() * 15));
+          burst(new THREE.Vector3(playerPos.x, 1.2, playerPos.z).addScaledVector(new THREE.Vector3(c.pos.x-playerPos.x,0,c.pos.z-playerPos.z).normalize(), -.6), 0xff3020, 30, 2.2);
+        } else {
+          spawnFloat('IT SNAPS AT AIR', '#9fd8ff');
+          sfx.dodge();
+        }
+      }
+      // chomping
+      if(t >= .45 && t < 1.45){
+        const phase = (t - .45) * 13;
+        c.lidPivot.rotation.x = -.25 - Math.abs(Math.sin(phase)) * 1.05;
+        const idx = Math.floor(phase / Math.PI);
+        if(idx !== c.lastChomp){
+          c.lastChomp = idx;
+          sfx.snap();
+          if(Math.hypot(playerPos.x - c.pos.x, playerPos.z - c.pos.z) < 6) trauma = Math.min(1, trauma + .12);
+        }
+      }
+      if(t >= 1.45){
+        c.attack = false; c.sprung = true;
+        c.lidPivot.rotation.x = -1.05;
+        c.tongue.visible = true;
+        c.eye.scale.setScalar(1.1);
+      }
+      c.aura.intensity = 6 * Math.max(0, 1 - t / 2);
+    } else {
+      // sprung mimic — jaw idles, tongue lolls
+      c.lidPivot.rotation.x = -1.02 + Math.sin(time * 1.8 + ph) * .07;
+      if(c.tongue) c.tongue.rotation.x = .55 + Math.sin(time * 3 + ph) * .1;
+      c.aura.intensity = Math.max(0, c.aura.intensity - dt * 3);
+      if(c.aura.intensity < .02) c.aura.visible = false;
+    }
+    return;
+  }
+
+  /* ------- unopened tells ------- */
+  if(c.isMimic){
+    // breathing
+    const br = Math.sin(time * (F ? 2.1 : 2.7) + ph);
+    const a = F ? .05 : .013;
+    c.group.scale.set(1 + a*br*.6, 1 + a*br, 1 + a*br*.6);
+    // rattling fits
+    if(time > c.nextRattle){
+      c.rattleT = F ? .5 : .28;
+      c.nextRattle = time + (F ? rand(1.2, 3) : rand(3.5, 8));
+      if(state === 'playing' && locked && playerPos.distanceTo(c.pos) < 7) sfx.rattle();
+    }
+    if(c.rattleT > 0){
+      c.rattleT -= dt;
+      const s = F ? .05 : .018;
+      c.group.rotation.z = Math.sin(time * 70) * s;
+      c.group.position.y = Math.abs(Math.sin(time * 55)) * s * .8;
+    } else {
+      c.group.rotation.z = F ? Math.sin(time * 9 + ph) * .012 : 0;
+      c.group.position.y = 0;
+    }
+    // seam: angry red pulse
+    c.seam.material.opacity = F ? .5 + .3 * Math.sin(time * 5.2 + ph) : .12 + .09 * Math.sin(time * 2.3 + ph);
+    // the eye
+    if(F){
+      c.eye.scale.setScalar(Math.min(1, c.eye.scale.x + dt * 3));
+      // pupil tracks the player
+      const dx = clamp((playerPos.x - c.pos.x) * .004, -.012, .012);
+      c.pupil.position.x = dx;
+    } else {
+      if(time > c.nextBlink){ c.nextBlink = time + rand(3, 7); c.blinkT = .22; }
+      if(c.blinkT > 0){ c.blinkT -= dt; c.eye.scale.setScalar(.95); }
+      else c.eye.scale.setScalar(0);
+    }
+    c.aura.intensity = F ? 4 + 1.6 * Math.sin(time * 6 + ph) : 0;
+  } else {
+    // honest chest: perfectly still, faint warm shimmer
+    c.seam.material.opacity = F ? .55 + .3 * Math.sin(time * 3.1 + ph) : .09 + .09 * Math.sin(time * 1.7 + ph);
+    c.keyGlint.material.opacity = (F ? .7 : .28) + .18 * Math.sin(time * 2 + ph);
+    c.aura.intensity = F ? 2.6 + .8 * Math.sin(time * 3 + ph) : 0;
+    if(c.sparkles && c.sparkles.visible){
+      c.sparkles.rotation.y += dt * .6;
+      c.sparkles.material.opacity = .5 + .4 * Math.sin(time * 4 + ph);
+    }
+  }
+}
+
+/* ============================================================
+   PLAYER + MAIN LOOP
+   ============================================================ */
+function updatePlayer(dt){
+  const fwd = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+  const str = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+  const speed = 4.3;
+  tmpV.set(str, 0, -fwd).normalize().applyAxisAngle(new THREE.Vector3(0,1,0), yaw).multiplyScalar(speed);
+  vel.lerp(tmpV, Math.min(1, dt * 10));
+  playerPos.addScaledVector(vel, dt);
+
+  // corridor bounds
+  playerPos.x = clamp(playerPos.x, -2.42, 2.42);
+  playerPos.z = clamp(playerPos.z, -45.2, 4.2);
+
+  // chest collision
+  for(const c of chests){
+    const dx = playerPos.x - c.pos.x, dz = playerPos.z - c.pos.z;
+    const d2 = dx*dx + dz*dz, r = .78;
+    if(d2 < r*r && d2 > .0001){
+      const d = Math.sqrt(d2);
+      playerPos.x = c.pos.x + dx / d * r;
+      playerPos.z = c.pos.z + dz / d * r;
+    }
+  }
+
+  // head bob
+  const sp = vel.length() / speed;
+  bobT += dt * vel.length() * 1.9;
+  playerPos.y = 1.6 + Math.sin(bobT * 2) * .032 * sp;
+
+  // exit — step into the portal glow
+  if(playerPos.z < -44.8 && state === 'playing') endRun(true);
+}
+
+function updateHover(){
+  if(state !== 'playing'){ if(hovered){ hovered.wood.emissive.setHex(0); hovered = null; setPrompt(false); } return; }
+  raycaster.setFromCamera({ x:0, y:0 }, camera);
+  const hits = raycaster.intersectObjects(hitTargets, false);
+  let target = null;
+  for(const h of hits){
+    const c = h.object.userData.chest;
+    if(c && !c.opened){ target = c; break; }
+  }
+  if(target !== hovered){
+    if(hovered) hovered.wood.emissive.setHex(0x000000);
+    hovered = target;
+    if(hovered) hovered.wood.emissive.setHex(0x2a1a08);
+    setPrompt(!!hovered);
+  }
+}
+
+function tick(){
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), .05);
+  time += dt;
+
+  // camera
+  if(state === 'menu'){
+    const t = time;
+    camera.position.set(Math.sin(t * .07) * .7, 1.62 + Math.sin(t * .21) * .05, 3.2);
+    camera.rotation.set(Math.sin(t * .13) * .05 - .02, Math.sin(t * .1) * .34, 0);
+  } else {
+    updatePlayer(dt);
+    camera.position.copy(playerPos);
+    const sh = trauma * trauma;
+    camera.rotation.set(
+      pitch + (Math.random() - .5) * sh * .09,
+      yaw + (Math.random() - .5) * sh * .09,
+      (Math.random() - .5) * sh * .05
+    );
+  }
+  trauma = Math.max(0, trauma - dt * 1.3);
+
+  // world life
+  for(const c of chests) animChest(c, dt);
+  for(const t of torches){
+    t.light.intensity = 13 + Math.sin(time * 11 + t.phase) * 1.6 + Math.sin(time * 23 + t.phase * 2) * 1.1;
+    const s = 1 + Math.sin(time * 13 + t.phase) * .09;
+    t.flame.scale.set(.55 * s, .85 * (2 - s), 1);
+  }
+  // dust drift
+  {
+    const arr = dust.geometry.attributes.position.array;
+    for(let i=0;i<dustPhase.length;i++){
+      arr[i*3+1] = dustBase[i*3+1] + Math.sin(time * .3 + dustPhase[i]) * .35;
+      arr[i*3]   = dustBase[i*3]   + Math.sin(time * .17 + dustPhase[i] * 2) * .25;
+    }
+    dust.geometry.attributes.position.needsUpdate = true;
+  }
+  updateBursts(dt);
+
+  // portal shimmer
+  portalMat.opacity = .42 + .18 * Math.sin(time * 2.2);
+  if(portalOn){
+    portalMat.color.lerp(new THREE.Color(0x46ffa0), dt * 2);
+    portalLight.color.lerp(new THREE.Color(0x46ffa0), dt * 2);
+    portalLight.intensity = 12 + Math.sin(time * 4) * 3;
+  }
+
+  if(state === 'playing'){
+    updateHover();
+    if(hp <= 30 && hp > 0 && time > nextBeat){
+      nextBeat = time + .55 + (hp / 30) * .55;
+      sfx.thump();
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+initScene();
+buildChests();
+setMode(mode);
+updateBestUI();
+showScreen('menu');
+clock = new THREE.Clock();
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+// re-lock when clicking the canvas mid-run (after alt-tab etc.)
+renderer.domElement.addEventListener('click', ()=>{
+  if(state === 'playing' && !locked) lockPointer();
+});
+tick();
+</script>
+</body>
+</html>

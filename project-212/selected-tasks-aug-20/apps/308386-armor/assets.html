@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Vigil — An Armoury in Shadow</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,400;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body { margin: 0; }
+  .font-cinzel { font-family: 'Cinzel', serif; }
+  .font-cormorant { font-family: 'Cormorant Garamond', serif; }
+  .vignette {
+    background:
+      radial-gradient(ellipse at 50% 42%, transparent 38%, rgba(0,0,0,0.38) 74%, rgba(0,0,0,0.82) 100%),
+      linear-gradient(to bottom, rgba(0,0,0,0.35), transparent 18%, transparent 82%, rgba(0,0,0,0.5));
+  }
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.055;
+    mix-blend-mode: overlay;
+    animation: grainShift 0.9s steps(3) infinite;
+  }
+  @keyframes grainShift {
+    0% { background-position: 0 0; }
+    33% { background-position: -120px 60px; }
+    66% { background-position: 80px -140px; }
+    100% { background-position: 0 0; }
+  }
+  .hairline { height: 1px; background: linear-gradient(90deg, rgba(214,192,140,0.7), rgba(214,192,140,0.0)); }
+  .loader-line { transform: scaleX(0); transition: transform 0.25s linear; animation: loadCreep 8s ease-out forwards; }
+  @keyframes loadCreep { from { transform: scaleX(0.015); } to { transform: scaleX(0.14); } }
+  #tweaks input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 2px; margin: 0;
+    background: rgba(214,192,140,0.22); outline: none; cursor: pointer;
+    accent-color: #d6c08c;
+  }
+  #tweaks input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 11px; height: 11px; border-radius: 50%; background: #d6c08c; cursor: pointer;
+  }
+  #tweaks input[type=range]::-moz-range-thumb {
+    width: 11px; height: 11px; border: 0; border-radius: 50%; background: #d6c08c; cursor: pointer;
+  }
+  #tw-body::-webkit-scrollbar { width: 3px; }
+  #tw-body::-webkit-scrollbar-track { background: transparent; }
+  #tw-body::-webkit-scrollbar-thumb { background: rgba(214,192,140,0.28); }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.35.6/build/index.js"
+  }
+}
+</script>
+</head>
+<body class="bg-black">
+
+<!-- 3D canvas mount -->
+<div id="app" class="fixed inset-0"></div>
+
+<!-- cinematic overlays -->
+<div class="vignette fixed inset-0 pointer-events-none z-30"></div>
+<div class="grain fixed inset-0 pointer-events-none z-40"></div>
+
+<!-- UI -->
+<div id="ui" class="fixed inset-0 z-20 pointer-events-none opacity-0">
+  <header class="absolute bottom-20 left-8 md:bottom-24 md:left-14">
+    <p class="font-cinzel text-[10px] md:text-[11px] tracking-[0.55em] text-[#d6c08c]/70 uppercase">Hall of Arms · North Range</p>
+    <h1 class="font-cinzel text-[#e8e2d2] text-[clamp(2rem,4.6vw,3.4rem)] leading-[1.05] mt-2 tracking-[0.08em]">THE VIGIL</h1>
+    <div class="hairline w-36 md:w-48 mt-3"></div>
+    <p class="font-cormorant italic text-[#9aa0ab] text-sm md:text-base mt-2 max-w-[17rem] leading-snug">A full harness of plate, Milanese fashion, standing watch where the daylight falls.</p>
+  </header>
+
+  <footer class="absolute bottom-7 left-8 md:bottom-10 md:left-14 right-8 md:right-14 flex items-end justify-between">
+    <p class="font-cinzel text-[9px] md:text-[10px] tracking-[0.28em] text-[#8b9097]/80 uppercase leading-loose">
+      Drag · Orbit&ensp;&mdash;&ensp;Scroll · Zoom
+    </p>
+    <p class="font-cormorant italic text-[#6d7278] text-sm hidden md:block">single source &mdash; daylight</p>
+  </footer>
+</div>
+
+<!-- armour tweak panel -->
+<div id="tweaks" class="fixed top-5 right-5 z-[60] w-[266px] opacity-0 select-none">
+  <div class="border border-[#d6c08c]/25 bg-black/80 backdrop-blur-sm">
+    <button id="tw-toggle" class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left">
+      <span class="font-cinzel text-[10px] tracking-[0.38em] text-[#d6c08c]/85 uppercase">Fit the scene</span>
+      <span id="tw-chev" class="font-cinzel text-[11px] leading-none text-[#d6c08c]/60">&minus;</span>
+    </button>
+    <div id="tw-panel">
+      <div id="tw-body" class="max-h-[64vh] overflow-y-auto px-4 pb-1"></div>
+      <div class="flex gap-2 border-t border-[#d6c08c]/15 px-4 py-3">
+        <button id="tw-reset" class="flex-1 border border-[#d6c08c]/30 py-2 font-cinzel text-[9px] tracking-[0.24em] text-[#c9c3b4] uppercase hover:bg-[#d6c08c]/10">Reset</button>
+        <button id="tw-copy" class="flex-1 border border-[#d6c08c]/30 py-2 font-cinzel text-[9px] tracking-[0.24em] text-[#c9c3b4] uppercase hover:bg-[#d6c08c]/10">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- loader -->
+<div id="loader" class="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center gap-6">
+  <p class="font-cinzel text-[11px] tracking-[0.6em] text-[#d6c08c]/80 uppercase">Entering the Armoury</p>
+  <div class="w-44 h-px bg-white/10 overflow-hidden">
+    <div class="loader-line h-full w-full bg-[#d6c08c]/70 origin-left"></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import {
+  EffectComposer, RenderPass, EffectPass,
+  BloomEffect, DepthOfFieldEffect, NoiseEffect, VignetteEffect,
+  ChromaticAberrationEffect, BlendFunction, KernelSize
+} from 'postprocessing';
+
+/* ============================================================
+   RENDERER / SCENE / CAMERA
+============================================================ */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+/* 1.8M static triangles — re-render the shadow map only when something moves */
+renderer.shadowMap.autoUpdate = false;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.54;
+renderer.domElement.style.cursor = 'grab';
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.FogExp2(0x000000, 0.052);
+
+const camera = new THREE.PerspectiveCamera(44, innerWidth / innerHeight, 0.1, 80);
+camera.position.set(2.3, 1.74, 7.1); // intro start, tweened inward
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.14, 0);          // just under the breastplate
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 1.3;
+controls.maxDistance = 8.5;
+controls.minPolarAngle = 0.32;
+controls.maxPolarAngle = 1.82;            // stay above the floor
+controls.autoRotate = false;
+controls.addEventListener('start', () => { gsap.killTweensOf(camera.position); });
+
+/* Materials that should scale with the environment slider, each with the
+   base intensity it was authored at. */
+const envMaterials = [];
+function registerEnv(mat, base) { envMaterials.push({ mat, base }); mat.envMapIntensity = base; }
+
+/* Overcast HDRI drives both the reflections and the sky seen through the
+   slit. RoomEnvironment stands in if the CDN fetch fails, so the steel is
+   never left with nothing to mirror. */
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+let skyTexture = null;
+let skyPortal = null;
+/* The npm three package does not publish examples/textures, so these come
+   from the GitHub-backed CDN. Tried in order — overcast first, then other
+   flat-light skies — so one missing file cannot leave the scene unlit. */
+const HDRI_URLS = [
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/equirectangular/quarry_01_1k.hdr',
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/equirectangular/royal_esplanade_1k.hdr',
+  'https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/textures/equirectangular/quarry_01_1k.hdr'
+];
+const rgbe = new RGBELoader();
+function loadSky(i) {
+  if (i >= HDRI_URLS.length) {
+    console.error('[hdri] every source failed — keeping RoomEnvironment');
+    assetReady('hdri');
+    return;
+  }
+  rgbe.load(HDRI_URLS[i],
+    hdr => {
+      hdr.mapping = THREE.EquirectangularReflectionMapping;
+      scene.environment = pmrem.fromEquirectangular(hdr).texture;
+      skyTexture = hdr;
+      if (skyPortal) { skyPortal.material.uniforms.uSky.value = hdr; skyPortal.visible = true; }
+      console.log('[hdri] loaded', HDRI_URLS[i].split('/').pop());
+      applyTweaks();
+      renderer.shadowMap.needsUpdate = true;
+      assetReady('hdri');
+    },
+    ev => { LOADS.hdri.l = ev.loaded || 0; bumpProgress(); },
+    () => { console.warn('[hdri] source ' + i + ' failed, trying next'); loadSky(i + 1); }
+  );
+}
+loadSky(0);
+
+/* ============================================================
+   POST-PROCESSING — pmndrs, all effects merged into one pass so the
+   frame is read once rather than once per effect
+============================================================ */
+const composer = new EffectComposer(renderer, {
+  frameBufferType: THREE.HalfFloatType,
+  multisampling: 4
+});
+composer.addPass(new RenderPass(scene, camera));
+
+const focus = { offset: 0 };
+const dof = new DepthOfFieldEffect(camera, {
+  worldFocusDistance: 4.85,
+  worldFocusRange: 2.6,
+  bokehScale: 0.9,
+  resolutionScale: 0.75
+});
+const bloom = new BloomEffect({
+  intensity: 0.72,
+  luminanceThreshold: 0.42,
+  luminanceSmoothing: 0.5,
+  mipmapBlur: true,
+  kernelSize: KernelSize.LARGE
+});
+const aberration = new ChromaticAberrationEffect({
+  offset: new THREE.Vector2(0.0005, 0.0005),
+  radialModulation: true,
+  modulationOffset: 0.42
+});
+const vignette = new VignetteEffect({ offset: 0.31, darkness: 0.62 });
+const grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: true });
+grain.blendMode.opacity.value = 0.12;
+
+composer.addPass(new EffectPass(camera, dof, bloom, aberration, vignette, grain));
+
+/* ============================================================
+   PROCEDURAL STONE TEXTURES
+============================================================ */
+function roundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function makeStoneTextures({ size = 1024, rows = 10, tile = 4.5, baseL = 16, dark = false } = {}) {
+  const cCol = document.createElement('canvas'); cCol.width = cCol.height = size;
+  const cBmp = document.createElement('canvas'); cBmp.width = cBmp.height = size;
+  const col = cCol.getContext('2d'), bmp = cBmp.getContext('2d');
+  col.fillStyle = dark ? '#0c0c0e' : '#111114'; col.fillRect(0, 0, size, size);
+  bmp.fillStyle = '#000'; bmp.fillRect(0, 0, size, size);
+
+  const rowH = size / rows;
+  const gap = Math.max(4, size * 0.006);
+  for (let r = 0; r < rows; r++) {
+    const bricks = 4 + Math.floor(Math.random() * 2);
+    const bw = size / bricks;
+    const off = (r % 2) * bw * 0.5;
+    for (let b = -1; b <= bricks; b++) {
+      const x = b * bw + off + (Math.random() - 0.5) * 8;
+      const y = r * rowH + (Math.random() - 0.5) * 5;
+      const w = bw - gap - Math.random() * 10;
+      const h = rowH - gap - Math.random() * 4;
+      const L = baseL + (Math.random() - 0.5) * 10;
+      const grad = col.createLinearGradient(x, y, x + w * 0.3, y + h);
+      grad.addColorStop(0, `hsl(${222 + Math.random() * 14}, ${5 + Math.random() * 7}%, ${L + 5}%)`);
+      grad.addColorStop(1, `hsl(${220 + Math.random() * 16}, ${4 + Math.random() * 6}%, ${Math.max(4, L - 6)}%)`);
+      col.fillStyle = grad;
+      roundedRect(col, x + gap / 2, y + gap / 2, w, h, 7); col.fill();
+      const bl = 120 + Math.random() * 70;
+      bmp.fillStyle = `rgb(${bl},${bl},${bl})`;
+      roundedRect(bmp, x + gap / 2, y + gap / 2, w, h, 7); bmp.fill();
+    }
+  }
+  /* speckle + mottling */
+  for (let i = 0; i < 5200; i++) {
+    const a = Math.random() * 0.05;
+    col.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a * 1.6})`;
+    col.fillRect(Math.random() * size, Math.random() * size, 1.4, 1.4);
+  }
+  for (let i = 0; i < 7; i++) {
+    const gx = Math.random() * size, gy = Math.random() * size, gr = 140 + Math.random() * 260;
+    const g = col.createRadialGradient(gx, gy, 0, gx, gy, gr);
+    g.addColorStop(0, 'rgba(0,0,0,0.22)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    col.fillStyle = g; col.fillRect(0, 0, size, size);
+  }
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  const texCol = new THREE.CanvasTexture(cCol);
+  texCol.colorSpace = THREE.SRGBColorSpace;
+  texCol.wrapS = texCol.wrapT = THREE.RepeatWrapping;
+  texCol.repeat.set(1 / tile, 1 / tile);
+  texCol.anisotropy = Math.min(8, maxAniso);
+  const texBmp = new THREE.CanvasTexture(cBmp);
+  texBmp.wrapS = texBmp.wrapT = THREE.RepeatWrapping;
+  texBmp.repeat.copy(texCol.repeat);
+  texBmp.anisotropy = texCol.anisotropy;
+  return { map: texCol, bumpMap: texBmp };
+}
+
+/* ============================================================
+   MATERIALS
+============================================================ */
+const steel = new THREE.MeshStandardMaterial({
+  color: 0xccd2d9, metalness: 1.0, roughness: 0.29, envMapIntensity: 0.38, side: THREE.DoubleSide
+});
+const steelDark = new THREE.MeshStandardMaterial({
+  color: 0x878d94, metalness: 0.95, roughness: 0.42, envMapIntensity: 0.25, side: THREE.DoubleSide
+});
+const visorSteel = new THREE.MeshStandardMaterial({
+  color: 0x9fa8b1, metalness: 1.0, roughness: 0.31, envMapIntensity: 0.42, side: THREE.DoubleSide
+});
+const brass = new THREE.MeshStandardMaterial({
+  color: 0x9a7a3a, metalness: 1.0, roughness: 0.34, envMapIntensity: 0.6
+});
+const leather = new THREE.MeshStandardMaterial({ color: 0x2b1a0e, roughness: 0.9, metalness: 0.0 });
+const wood = new THREE.MeshStandardMaterial({ color: 0x201205, roughness: 0.82, metalness: 0.0 });
+const blackMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+
+/* ============================================================
+   THE ROOM — floor, walls, high window
+============================================================ */
+const WALL_Z = -2.75, LEFT_X = -3.2, RIGHT_X = 3.4;
+const WIN = { cx: LEFT_X, cy: 3.22, cz: -1.15, w: 0.72, sill: 2.5, arch: 3.6, apex: 3.94 };
+
+/* Photographed PBR sets from FreePBR: basecolor (AO already multiplied in at
+   bake time, so no second UV channel is needed), OpenGL-convention normal,
+   roughness. Both source metallic maps sampled as a constant 0, so metalness
+   is a number here rather than a 4MB texture.
+   The load callbacks are async, so they safely reference LOADS and the
+   surface registries that are declared further down. */
+const texLoader = new THREE.TextureLoader();
+function loadPbrSet(slug, gateKey, onReady) {
+  const maps = {};
+  let left = 3;
+  for (const [key, suffix, srgb] of [
+    ['map', 'basecolor', true],
+    ['normalMap', 'normal', false],
+    ['roughnessMap', 'roughness', false]
+  ]) {
+    const file = 'assets/textures/' + slug + '_' + suffix + '.jpg';
+    const t = texLoader.load(file,
+      () => {
+        LOADS[gateKey].l = LOADS[gateKey].t * (4 - left) / 3;
+        bumpProgress();
+        if (--left === 0) {
+          onReady();
+          applyTweaks();
+          renderer.shadowMap.needsUpdate = true;
+          assetReady(gateKey);
+        }
+      },
+      undefined,
+      err => { console.error('[' + slug + '] ' + file + ' failed', err); if (--left === 0) assetReady(gateKey); });
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    maps[key] = t;
+  }
+  return maps;
+}
+
+const FLOOR_SIZE = 46;
+const floorMaps = loadPbrSet('floor', 'tiles', () => {
+  for (const k in floorMaps) floorMaps[k].needsUpdate = true;
+});
+/* Physical rather than Standard so the damp sheen is a clearcoat lobe over
+   the stone, not just a smoother stone. */
+const floorMat = new THREE.MeshPhysicalMaterial({
+  map: floorMaps.map, normalMap: floorMaps.normalMap, roughnessMap: floorMaps.roughnessMap,
+  roughness: 1.0, metalness: 0.02,
+  clearcoat: 0.75, clearcoatRoughness: 0.22
+});
+registerEnv(floorMat, 0.14);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE), floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const stoneMaps = loadPbrSet('wall', 'stone', () => {
+  for (const s of wallSurfaces) for (const k in s.maps) s.maps[k].needsUpdate = true;
+});
+
+/* Every wall keeps its own texture clones so each tiles to its own size.
+   Registered here so the Room sliders can retune them all at once. */
+const wallSurfaces = [];
+function stoneMat(w, h) {
+  const maps = {};
+  for (const k in stoneMaps) {
+    const t = stoneMaps[k].clone();
+    t.version = 0;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = stoneMaps[k].colorSpace;
+    t.anisotropy = stoneMaps[k].anisotropy;
+    maps[k] = t;
+  }
+  const m = new THREE.MeshStandardMaterial({
+    map: maps.map, normalMap: maps.normalMap, roughnessMap: maps.roughnessMap,
+    roughness: 1.0, metalness: 0.0
+  });
+  registerEnv(m, 0.055);
+  wallSurfaces.push({ mat: m, maps, w, h });
+  return m;
+}
+/* w/h null => that geometry carries raw metre UVs (the shaped left wall),
+   so one repeat per metre is already the right scale */
+const wallMat = stoneMat(null, null);
+function planeWallMat(w, h) { return stoneMat(w, h); }
+
+/* back wall — right behind the harness */
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(15, 6.5), planeWallMat(15, 6.5));
+backWall.position.set(0, 3.25, WALL_Z);
+backWall.receiveShadow = true;
+scene.add(backWall);
+
+/* right wall, lost in darkness */
+const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(9, 6.5), planeWallMat(9, 6.5));
+rightWall.rotation.y = -Math.PI / 2;
+rightWall.position.set(RIGHT_X, 3.25, 0.6);
+rightWall.receiveShadow = true;
+scene.add(rightWall);
+
+/* left wall, with a tall narrow lancet cut high into it */
+function lancetHole(path, cx, w, sill, arch, apex) {
+  const l = cx - w / 2, r = cx + w / 2;
+  path.moveTo(l, sill);
+  path.lineTo(l, arch);
+  path.quadraticCurveTo(l, apex - 0.04, cx, apex);
+  path.quadraticCurveTo(r, apex - 0.04, r, arch);
+  path.lineTo(r, sill);
+  path.closePath();
+}
+{
+  const shape = new THREE.Shape();
+  shape.moveTo(-4.6, 0); shape.lineTo(2.75, 0); shape.lineTo(2.75, 6.5); shape.lineTo(-4.6, 6.5); shape.closePath();
+  const hole = new THREE.Path();
+  lancetHole(hole, -WIN.cz, WIN.w, WIN.sill, WIN.arch, WIN.apex); // local x maps to world -z
+  shape.holes.push(hole);
+  const leftWall = new THREE.Mesh(new THREE.ShapeGeometry(shape, 24), wallMat);
+  leftWall.rotation.y = Math.PI / 2;
+  leftWall.position.set(LEFT_X, 0, 0);
+  leftWall.receiveShadow = true;
+  scene.add(leftWall);
+}
+
+/* window glass — a cool bright sky beyond */
+function lancetShape(cx, w, sill, arch, apex) {
+  const s = new THREE.Shape();
+  const l = cx - w / 2, r = cx + w / 2;
+  s.moveTo(l, sill); s.lineTo(l, arch);
+  s.quadraticCurveTo(l, apex - 0.04, cx, apex);
+  s.quadraticCurveTo(r, apex - 0.04, r, arch);
+  s.lineTo(r, sill); s.closePath();
+  return s;
+}
+{
+  const gc = document.createElement('canvas'); gc.width = 128; gc.height = 256;
+  const g = gc.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.45, '#d3e2ff'); grad.addColorStop(1, '#7d97c4');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 256);
+  const hot = g.createRadialGradient(64, 70, 4, 64, 70, 120);
+  hot.addColorStop(0, 'rgba(255,255,255,0.95)'); hot.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = hot; g.fillRect(0, 0, 128, 256);
+  const skyTex = new THREE.CanvasTexture(gc); skyTex.colorSpace = THREE.SRGBColorSpace;
+
+  const glassGeo = new THREE.ShapeGeometry(lancetShape(-WIN.cz, WIN.w - 0.05, WIN.sill + 0.03, WIN.arch, WIN.apex - 0.03), 20);
+  const glass = new THREE.Mesh(glassGeo, new THREE.MeshBasicMaterial({ map: skyTex, fog: false }));
+  glass.material.color.setRGB(1.5, 1.65, 2.0);
+  glass.rotation.y = Math.PI / 2;
+  glass.position.set(LEFT_X + 0.02, 0, 0);
+  scene.add(glass);
+
+  /* stone sill + reveals */
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, WIN.w + 0.22), wallMat);
+  sill.position.set(LEFT_X + 0.05, WIN.sill - 0.035, WIN.cz);
+  scene.add(sill);
+  const revealGeo = new THREE.BoxGeometry(0.1, WIN.arch - WIN.sill, 0.06);
+  for (const s of [-1, 1]) {
+    const rev = new THREE.Mesh(revealGeo, wallMat);
+    rev.position.set(LEFT_X + 0.03, (WIN.sill + WIN.arch) / 2, WIN.cz + s * (WIN.w / 2 + 0.03));
+    scene.add(rev);
+  }
+  /* soft halo hugging the opening */
+  const hc = document.createElement('canvas'); hc.width = hc.height = 128;
+  const hg = hc.getContext('2d');
+  const hgr = hg.createRadialGradient(64, 64, 2, 64, 64, 64);
+  hgr.addColorStop(0, 'rgba(190,212,255,0.85)'); hgr.addColorStop(1, 'rgba(190,212,255,0)');
+  hg.fillStyle = hgr; hg.fillRect(0, 0, 128, 128);
+  const halo = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.9, 2.7),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hc), transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })
+  );
+  halo.rotation.y = Math.PI / 2;
+  halo.position.set(LEFT_X + 0.06, WIN.cy, WIN.cz);
+  scene.add(halo);
+
+  /* Sits just outside the aperture and samples the equirect HDRI in the
+     direction the eye is actually looking, which is what a skybox does —
+     so the sky shifts correctly as you orbit instead of sliding like a
+     pasted photo. Hidden until the HDRI lands. */
+  skyPortal = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.4, 3.8),
+    new THREE.ShaderMaterial({
+      side: THREE.DoubleSide,
+      uniforms: { uSky: { value: null }, uBright: { value: 0.55 } },
+      vertexShader: `
+        varying vec3 vWorld;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorld = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }`,
+      fragmentShader: `
+        uniform sampler2D uSky;
+        uniform float uBright;
+        varying vec3 vWorld;
+        void main() {
+          vec3 d = normalize(vWorld - cameraPosition);
+          vec2 uv = vec2(atan(d.z, d.x) / 6.28318531 + 0.5,
+                         asin(clamp(d.y, -1.0, 1.0)) / 3.14159265 + 0.5);
+          gl_FragColor = vec4(texture2D(uSky, uv).rgb * uBright, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`
+    })
+  );
+  skyPortal.rotation.y = Math.PI / 2;
+  skyPortal.position.set(LEFT_X - 0.08, WIN.cy, WIN.cz);
+  skyPortal.visible = false;
+  scene.add(skyPortal);
+  if (skyTexture) { skyPortal.material.uniforms.uSky.value = skyTexture; skyPortal.visible = true; }
+}
+
+/* ============================================================
+   THE HARNESS — scanned plate harness (GLB) on a plain oak plinth.
+   It arrives as ONE fused mesh with no named pieces, so nothing here
+   can be pivoted per-part; the tweak panel drives the whole harness.
+   Textures are KTX2 and the geometry is meshopt-packed, hence the
+   two extra decoders.
+============================================================ */
+const armour = new THREE.Group();
+scene.add(armour);
+
+const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.38, 0.055, 32), wood);
+plinth.position.y = 0.0275;
+plinth.castShadow = true;
+plinth.receiveShadow = true;
+armour.add(plinth);
+
+/* Two ~20MB GLBs. Hold the intro until both are in, and drive the loader
+   bar off their combined bytes. */
+const LOADS = { harness: { l: 0, t: 20518176 }, rack: { l: 0, t: 18473400 }, stone: { l: 0, t: 1500000 }, tiles: { l: 0, t: 1200000 }, hdri: { l: 0, t: 1700000 } };
+function bumpProgress() {
+  let l = 0, t = 0;
+  for (const k in LOADS) { l += LOADS[k].l; t += LOADS[k].t; }
+  const bar = document.querySelector('.loader-line');
+  if (!bar) return;
+  if (l > 0) bar.style.animation = 'none';   // real numbers supersede the creep
+  bar.style.transform = 'scaleX(' + Math.min(1, l / t).toFixed(3) + ')';
+}
+let pendingAssets = 5;
+function assetReady(key) {
+  if (key && LOADS[key]) { LOADS[key].l = LOADS[key].t; bumpProgress(); }
+  if (--pendingAssets <= 0) beginVigil();
+}
+
+/* give an imported mesh scene-appropriate shading */
+function dressImport(root) {
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    const m = o.material;
+    if (!m) return;
+    registerEnv(m, 0.5);
+    if (m.map) m.map.anisotropy = Math.min(8, maxAniso);
+    m.needsUpdate = true;
+  });
+}
+
+const PLINTH_TOP = 0.055;
+const HARNESS_HEIGHT = 1.78;
+let harness = null;
+
+const ktx2 = new KTX2Loader()
+  .setTranscoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/')
+  .detectSupport(renderer);
+
+const gltfLoader = new GLTFLoader();
+gltfLoader.setKTX2Loader(ktx2);
+gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+
+gltfLoader.load('assets/models/armour.glb',
+  gltf => {
+    const root = gltf.scene;
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const ctr = box.getCenter(new THREE.Vector3());
+    const s = HARNESS_HEIGHT / size.y;
+    root.scale.setScalar(s);
+    root.position.set(-ctr.x * s, -box.min.y * s + PLINTH_TOP, -ctr.z * s);
+
+    dressImport(root);
+
+    harness = new THREE.Group();
+    harness.add(root);
+    armour.add(harness);
+    console.log('[harness] raw size', size.toArray().map(n => n.toFixed(3)).join(' x '), '-> scale', s.toFixed(3));
+    applyTweaks();
+    assetReady('harness');
+  },
+  ev => { LOADS.harness.l = ev.loaded || 0; bumpProgress(); },
+  err => { console.error('[harness] load failed', err); assetReady('harness'); });
+
+/* ============================================================
+   WEAPON RACK — scanned rack and arms (GLB). Another single fused
+   mesh, so it drops in whole rather than being dressed piece by piece.
+============================================================ */
+const rack = new THREE.Group();
+rack.position.set(1.73, 0.005, -0.79);
+rack.rotation.y = -0.035;
+scene.add(rack);
+
+const RACK_WIDTH = 1.55;
+
+gltfLoader.load('assets/models/weapon-rack.glb',
+  gltf => {
+    const root = gltf.scene;
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const ctr = box.getCenter(new THREE.Vector3());
+    const s = RACK_WIDTH / size.x;
+    root.scale.setScalar(s);
+    root.position.set(-ctr.x * s, -box.min.y * s, -ctr.z * s);
+    dressImport(root);
+    rack.add(root);
+    window.__rack = rack;
+    console.log('[rack] raw size', size.toArray().map(n => n.toFixed(3)).join(' x '), '-> scale', s.toFixed(3));
+    renderer.shadowMap.needsUpdate = true;
+    assetReady('rack');
+  },
+  ev => { LOADS.rack.l = ev.loaded || 0; bumpProgress(); },
+  err => { console.error('[rack] load failed', err); assetReady('rack'); });
+
+/* ============================================================
+   LIGHT — one shaft of daylight, and almost nothing else
+============================================================ */
+const WIN_POS = new THREE.Vector3(WIN.cx, WIN.cy, WIN.cz);
+const TARGET = new THREE.Vector3(0, 1.32, 0.02);
+const SHAFT_DIR = TARGET.clone().sub(WIN_POS).normalize();
+const shaftLen = WIN_POS.y / -SHAFT_DIR.y;
+const FLOOR_HIT = WIN_POS.clone().addScaledVector(SHAFT_DIR, shaftLen);
+const SHAFT_MID = WIN_POS.clone().add(FLOOR_HIT).multiplyScalar(0.5);
+const shaftQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), SHAFT_DIR);
+
+const spot = new THREE.SpotLight(0xdfe9ff, 4.4, 0, 0.175, 0.55, 0);
+spot.position.set(WIN.cx + 0.16, WIN.cy, WIN.cz);
+spot.target.position.copy(TARGET);
+spot.castShadow = true;
+spot.shadow.mapSize.set(2048, 2048);
+spot.shadow.bias = -0.0004;
+spot.shadow.camera.near = 1;
+spot.shadow.camera.far = 14;
+scene.add(spot, spot.target);
+
+/* cool spill licking the stones around the window */
+const winGlow = new THREE.PointLight(0xbdd2ff, 2.6, 4.5, 2);
+winGlow.position.set(WIN.cx + 0.3, WIN.cy, WIN.cz);
+scene.add(winGlow);
+
+/* daylight bouncing off the lit flagstones — the only thing that lets
+   the stonework behind the harness read at all */
+const bounce = new THREE.PointLight(0xa6bad8, 2.4, 10, 2);
+bounce.position.copy(FLOOR_HIT).add(new THREE.Vector3(-0.1, 0.5, 0.05));
+scene.add(bounce);
+
+/* barely-there catch on the rack so the steel there reads as edges, not void */
+const rackFill = new THREE.PointLight(0x9fb4d2, 1.3, 6.5, 2);
+rackFill.position.set(1.45, 1.65, 1.55);
+scene.add(rackFill);
+
+/* the faintest whisper of fill so silhouettes barely read */
+scene.add(new THREE.HemisphereLight(0x28313f, 0x0a0806, 0.32));
+const fill = new THREE.DirectionalLight(0x8fa0c0, 0.12);
+fill.position.set(4, 3.5, 5);
+scene.add(fill);
+
+/* ============================================================
+   VOLUMETRIC SHAFT — two soft cones of daylight
+============================================================ */
+const shaftUniformsList = [];
+function makeShaftCone(rFloor, rWin, intensity) {
+  const geo = new THREE.CylinderGeometry(rFloor, rWin, shaftLen, 36, 1, true);
+  const uniforms = {
+    uTime: { value: 0 },
+    uLen: { value: shaftLen },
+    uColor: { value: new THREE.Color(0xcfdcff) },
+    uIntensity: { value: intensity }
+  };
+  shaftUniformsList.push(uniforms);
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    vertexShader: `
+      uniform float uLen;
+      varying vec3 vN; varying vec3 vW; varying float vAlong;
+      void main(){
+        vN = normalize(mat3(modelMatrix) * normal);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vW = wp.xyz;
+        vAlong = position.y / uLen + 0.5;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform float uTime; uniform vec3 uColor; uniform float uIntensity;
+      varying vec3 vN; varying vec3 vW; varying float vAlong;
+      void main(){
+        vec3 V = normalize(cameraPosition - vW);
+        float soft = pow(abs(dot(normalize(vN), V)), 1.35);
+        float caps = smoothstep(0.0, 0.07, vAlong) * (1.0 - smoothstep(0.88, 1.0, vAlong));
+        float grad = mix(1.0, 0.42, vAlong) + smoothstep(0.86, 1.0, vAlong) * 0.35;
+        float shimmer = 0.82 + 0.18 * sin(vW.y * 7.0 - uTime * 0.55 + sin(vW.x * 4.0 + uTime * 0.3));
+        gl_FragColor = vec4(uColor, soft * caps * grad * shimmer * uIntensity);
+      }`
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(SHAFT_MID);
+  mesh.quaternion.copy(shaftQuat);
+  mesh.renderOrder = 5;
+  scene.add(mesh);
+  return mesh;
+}
+makeShaftCone(0.98, 0.36, 0.085);
+makeShaftCone(0.52, 0.19, 0.17);
+
+/* ============================================================
+   DUST — motes drifting down through the beam
+============================================================ */
+let dustUniforms;
+{
+  const COUNT = 700;
+  const pos = new Float32Array(COUNT * 3);
+  const seed = new Float32Array(COUNT * 3);
+  const size = new Float32Array(COUNT);
+  for (let i = 0; i < COUNT; i++) {
+    const y = Math.random() * shaftLen;
+    const rAt = THREE.MathUtils.lerp(0.3, 0.88, y / shaftLen);
+    const rf = 0.4 + Math.random() * 0.95;
+    const a = Math.random() * Math.PI * 2;
+    const rr = rAt * rf * Math.sqrt(Math.random());
+    pos[i * 3] = Math.cos(a) * rr;
+    pos[i * 3 + 1] = y - shaftLen / 2;
+    pos[i * 3 + 2] = Math.sin(a) * rr;
+    seed[i * 3] = Math.random();
+    seed[i * 3 + 1] = Math.random();
+    seed[i * 3 + 2] = rf;
+    size[i] = 3.5 + Math.random() * 6.5;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 3));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+
+  dustUniforms = {
+    uTime: { value: 0 },
+    uLen: { value: shaftLen },
+    uPixelRatio: { value: renderer.getPixelRatio() },
+    uColor: { value: new THREE.Color(0xe4ebff) },
+    uOpacity: { value: 0.5 }
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: dustUniforms,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    vertexShader: `
+      attribute vec3 aSeed; attribute float aSize;
+      uniform float uTime; uniform float uLen; uniform float uPixelRatio;
+      varying float vAlpha;
+      void main(){
+        vec3 p = position;
+        float ph = aSeed.x * 6.28318;
+        float sp = 0.028 + aSeed.y * 0.055;
+        float y01 = mod(p.y + uLen * 0.5 + uTime * sp, uLen);
+        p.y = y01 - uLen * 0.5;
+        p.x += sin(uTime * (0.14 + aSeed.y * 0.22) + ph) * 0.085;
+        p.z += cos(uTime * (0.11 + aSeed.x * 0.19) + ph * 1.7) * 0.085;
+        float ends = smoothstep(0.12, 0.85, y01) * (1.0 - smoothstep(uLen - 1.5, uLen - 0.25, y01));
+        float flicker = 0.5 + 0.5 * sin(uTime * (0.5 + aSeed.y * 0.8) + ph * 3.1);
+        vAlpha = clamp(ends * flicker / pow(aSeed.z, 1.25), 0.0, 1.0);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = min(aSize * uPixelRatio * (1.15 / -mv.z), 9.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uOpacity;
+      varying float vAlpha;
+      void main(){
+        float d = length(gl_PointCoord - 0.5);
+        float a = (1.0 - smoothstep(0.04, 0.5, d)) * vAlpha * uOpacity;
+        gl_FragColor = vec4(uColor, a);
+      }`
+  });
+  const dust = new THREE.Points(geo, mat);
+  dust.position.copy(SHAFT_MID);
+  dust.quaternion.copy(shaftQuat);
+  dust.renderOrder = 6;
+  scene.add(dust);
+}
+
+/* ============================================================
+   INTERACTION — orbit and zoom. The scanned harness is a single fused
+   mesh, so there is no visor to hinge and nothing to pick.
+============================================================ */
+renderer.domElement.addEventListener('pointerdown', () => { renderer.domElement.style.cursor = 'grabbing'; });
+addEventListener('pointerup', () => { renderer.domElement.style.cursor = 'grab'; });
+
+/* ============================================================
+   RESIZE / ANIMATE
+============================================================ */
+const BASE_FOV = 44;
+function fitCamera() {
+  camera.aspect = innerWidth / innerHeight;
+  /* widen on narrower viewports so the window and rack stay in frame */
+  camera.fov = camera.aspect < 1.5 ? Math.min(74, BASE_FOV * (1.5 / camera.aspect)) : BASE_FOV;
+  camera.updateProjectionMatrix();
+}
+fitCamera();
+addEventListener('resize', () => {
+  fitCamera();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  dustUniforms.uPixelRatio.value = renderer.getPixelRatio();
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  controls.update();
+  /* keep the focal plane on whatever the camera is orbiting */
+  if (dof.cocMaterial) {
+    dof.cocMaterial.worldFocusDistance =
+      Math.max(0.5, camera.position.distanceTo(controls.target) + focus.offset);
+  }
+  for (const u of shaftUniformsList) u.uTime.value = t;
+  dustUniforms.uTime.value = t;
+  composer.render();
+}
+animate();
+
+/* ============================================================
+   TWEAK PANEL — scale and swing each piece of the harness
+============================================================ */
+const CONTROLS = [
+  ['Harness', [
+    ['allSize', 'Size', 0.6, 1.4, 0.01, 1],
+    ['allTurn', 'Turn', -180, 180, 1, 0, '\u00b0'],
+    ['height', 'Height', -0.08, 0.2, 0.005, 0, 'm'],
+    ['lean', 'Lean', -12, 12, 0.5, 0, '\u00b0']
+  ]],
+  ['Steel', [
+    ['roughness', 'Roughness', 0.15, 1.6, 0.01, 0.96],
+    ['metalness', 'Metalness', 0.15, 1.6, 0.01, 1.19],
+    ['sheen', 'Sheen', 0, 1.6, 0.01, 1]
+  ]],
+  ['Plinth', [
+    ['plinthSize', 'Size', 0.6, 1.8, 0.01, 1]
+  ]],
+  ['Atmosphere', [
+    ['dofBlur', 'Bokeh', 0, 8, 0.1, 0.9],
+    ['dofOffset', 'Focus offset', -2.5, 3, 0.05, -0.9, 'm'],
+    ['dofRange', 'Focus depth', 0.6, 6, 0.1, 2.6, 'm'],
+    ['grainAmt', 'Grain', 0, 0.4, 0.005, 0.365],
+    ['vignetteAmt', 'Vignette', 0, 1.2, 0.01, 0.83],
+    ['aberration', 'Aberration', 0, 0.002, 0.0001, 0.0002]
+  ]],
+  ['Light', [
+    ['exposure', 'Exposure', 0.4, 2, 0.01, 0.54],
+    ['envLight', 'Reflections', 0, 2.5, 0.01, 0.59],
+    ['skyBright', 'Sky', 0, 3, 0.01, 0.55],
+    ['bloomAmt', 'Bloom', 0, 2, 0.01, 0.72]
+  ]],
+  ['Room', [
+    ['floorTone', 'Floor tone', 0.1, 2, 0.01, 0.7],
+    ['floorRelief', 'Floor relief', 0, 3, 0.05, 1.1],
+    ['floorScale', 'Tile spread', 1.5, 8, 0.1, 3.6, 'm'],
+    ['floorWet', 'Damp', 0, 1, 0.01, 0.75],
+    ['wallTone', 'Wall tone', 0.1, 1.6, 0.01, 0.32],
+    ['wallRelief', 'Relief', 0, 3, 0.05, 1.35],
+    ['wallScale', 'Stone size', 1.2, 5, 0.05, 2.4, 'm']
+  ]],
+  ['Rack', [
+    ['rackSize', 'Size', 0.4, 2, 0.01, 1.15],
+    ['rackTurn', 'Turn', -180, 180, 1, -2, '\u00b0'],
+    ['rackX', 'Across', 0.4, 3.1, 0.01, 1.73, 'm'],
+    ['rackZ', 'Depth', -2.5, 1.6, 0.01, -0.79, 'm'],
+    ['rackLift', 'Lift', -0.1, 0.6, 0.005, 0.005, 'm']
+  ]]
+];
+
+const DEFAULTS = {};
+for (const [, items] of CONTROLS) for (const c of items) DEFAULTS[c[0]] = c[5];
+const STORE = 'vigil.scene.tweaks.v6';
+const tweaks = Object.assign({}, DEFAULTS);
+/* Always starts collapsed: the panel would otherwise sit over the weapon rack,
+   so every fresh load shows the room unobstructed. Slider values still persist. */
+let panelOpen = false;
+try {
+  const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
+  if (saved) for (const k in DEFAULTS) if (typeof saved[k] === 'number') tweaks[k] = saved[k];
+} catch (e) { /* ignore a bad blob */ }
+
+const DEG = Math.PI / 180;
+function applyTweaks() {
+  const v = tweaks;
+  renderer.toneMappingExposure = v.exposure;
+  for (const e of envMaterials) e.mat.envMapIntensity = e.base * v.envLight;
+  dof.bokehScale = v.dofBlur;
+  focus.offset = v.dofOffset;
+  if (dof.cocMaterial) dof.cocMaterial.worldFocusRange = v.dofRange;
+  bloom.intensity = v.bloomAmt;
+  grain.blendMode.opacity.value = v.grainAmt;
+  vignette.darkness = v.vignetteAmt;
+  aberration.offset.set(v.aberration, v.aberration);
+  floorMat.clearcoat = v.floorWet;
+  floorMat.clearcoatRoughness = 0.14 + 0.34 * (1 - v.floorWet);
+  if (skyPortal) skyPortal.material.uniforms.uBright.value = v.skyBright;
+  const fr = FLOOR_SIZE / v.floorScale;
+  for (const k in floorMaps) floorMaps[k].repeat.set(fr, fr);
+  floorMat.color.setScalar(v.floorTone);
+  floorMat.normalScale.set(v.floorRelief, v.floorRelief);
+  for (const s of wallSurfaces) {
+    s.maps.map.repeat.set(s.w === null ? 1 / v.wallScale : s.w / v.wallScale,
+                          s.h === null ? 1 / v.wallScale : s.h / v.wallScale);
+    s.maps.normalMap.repeat.copy(s.maps.map.repeat);
+    s.maps.roughnessMap.repeat.copy(s.maps.map.repeat);
+    s.mat.color.setScalar(v.wallTone);
+    s.mat.normalScale.set(v.wallRelief, v.wallRelief);
+  }
+  armour.scale.setScalar(v.allSize);
+  armour.rotation.y = v.allTurn * DEG;
+  plinth.scale.set(v.plinthSize, 1, v.plinthSize);
+  rack.position.set(v.rackX, v.rackLift, v.rackZ);
+  rack.rotation.y = v.rackTurn * DEG;
+  rack.scale.setScalar(v.rackSize);
+  if (harness) {
+    harness.position.y = v.height;
+    harness.rotation.x = v.lean * DEG;
+    /* roughness/metalness multiply the model's own PBR maps */
+    harness.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      o.material.roughness = v.roughness;
+      o.material.metalness = v.metalness;
+      o.material.envMapIntensity = v.sheen;
+    });
+  }
+  renderer.shadowMap.needsUpdate = true;
+}
+
+const twBody = document.getElementById('tw-body');
+const readouts = {}, inputs = {};
+const fmt = (n, step, unit) => (step < 0.01 ? n.toFixed(3) : step < 1 ? n.toFixed(2) : Math.round(n)) + (unit || '');
+for (const [group, items] of CONTROLS) {
+  const sec = document.createElement('div');
+  sec.className = 'pt-3 pb-1';
+  const gh = document.createElement('p');
+  gh.className = 'font-cinzel text-[9px] tracking-[0.3em] text-[#d6c08c]/55 uppercase mb-2';
+  gh.textContent = group;
+  sec.appendChild(gh);
+  for (const [key, label, min, max, step, , unit] of items) {
+    const row = document.createElement('div');
+    row.className = 'mb-2.5';
+    const top = document.createElement('div');
+    top.className = 'flex items-baseline justify-between mb-1';
+    const lb = document.createElement('span');
+    lb.className = 'font-cormorant text-[13px] text-[#b9bcc2]';
+    lb.textContent = label;
+    const val = document.createElement('span');
+    val.className = 'font-cormorant italic text-[12px] text-[#8b9097] tabular-nums';
+    val.textContent = fmt(tweaks[key], step, unit);
+    top.append(lb, val);
+    const inp = document.createElement('input');
+    inp.type = 'range';
+    inp.dataset.k = key;
+    inp.min = min; inp.max = max; inp.step = step; inp.value = tweaks[key];
+    inp.addEventListener('input', () => {
+      tweaks[key] = parseFloat(inp.value);
+      val.textContent = fmt(tweaks[key], step, unit);
+      applyTweaks();
+      save();
+    });
+    readouts[key] = val; inputs[key] = inp;
+    row.append(top, inp);
+    sec.appendChild(row);
+  }
+  twBody.appendChild(sec);
+}
+
+let saveTimer = 0;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE, JSON.stringify(tweaks)); } catch (e) { /* private mode */ }
+  }, 250);
+}
+function syncInputs() {
+  for (const [, items] of CONTROLS) for (const [key, , , , step, , unit] of items) {
+    inputs[key].value = tweaks[key];
+    readouts[key].textContent = fmt(tweaks[key], step, unit);
+  }
+}
+
+const twPanel = document.getElementById('tw-panel');
+const twChev = document.getElementById('tw-chev');
+function drawPanelState() {
+  twPanel.style.display = panelOpen ? '' : 'none';
+  twChev.innerHTML = panelOpen ? '&minus;' : '+';
+}
+drawPanelState();
+document.getElementById('tw-toggle').addEventListener('click', () => {
+  panelOpen = !panelOpen;
+  drawPanelState();
+});
+document.getElementById('tw-reset').addEventListener('click', () => {
+  Object.assign(tweaks, DEFAULTS);
+  syncInputs(); applyTweaks(); save();
+});
+const copyBtn = document.getElementById('tw-copy');
+copyBtn.addEventListener('click', () => {
+  const changed = {};
+  for (const k in tweaks) if (tweaks[k] !== DEFAULTS[k]) changed[k] = tweaks[k];
+  const text = Object.keys(changed).length
+    ? JSON.stringify(changed, null, 2)
+    : 'all defaults';
+  const done = () => {
+    copyBtn.textContent = 'Copied';
+    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
+  } else fallback(text, done);
+});
+function fallback(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { /* nothing else to try */ }
+  ta.remove();
+}
+
+applyTweaks();
+
+/* intro — camera drifts in from the dark, UI fades up */
+const camGoal = { x: 1.42, y: 1.54, z: 4.62 };
+let vigilBegun = false;
+function beginVigil() {
+  if (vigilBegun) return;
+  vigilBegun = true;
+  renderer.shadowMap.needsUpdate = true;
+  gsap.to(camera.position, { ...camGoal, duration: 2.4, ease: 'power2.inOut' });
+  gsap.to('#loader', { autoAlpha: 0, duration: 0.9, ease: 'power2.out' });
+  gsap.to('#ui', { opacity: 1, duration: 1.4, delay: 0.5, ease: 'power2.out' });
+  gsap.to('#tweaks', { opacity: 1, duration: 1.2, delay: 0.7, ease: 'power2.out' });
+}
+/* never strand anyone behind the 20MB download */
+setTimeout(beginVigil, 40000);
+</script>
+</body>
+</html>

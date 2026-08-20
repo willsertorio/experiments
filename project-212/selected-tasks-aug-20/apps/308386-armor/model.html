@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Vigil — An Armoury in Shadow</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,400;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body { margin: 0; }
+  .font-cinzel { font-family: 'Cinzel', serif; }
+  .font-cormorant { font-family: 'Cormorant Garamond', serif; }
+  .vignette {
+    background:
+      radial-gradient(ellipse at 50% 42%, transparent 38%, rgba(0,0,0,0.38) 74%, rgba(0,0,0,0.82) 100%),
+      linear-gradient(to bottom, rgba(0,0,0,0.35), transparent 18%, transparent 82%, rgba(0,0,0,0.5));
+  }
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.055;
+    mix-blend-mode: overlay;
+    animation: grainShift 0.9s steps(3) infinite;
+  }
+  @keyframes grainShift {
+    0% { background-position: 0 0; }
+    33% { background-position: -120px 60px; }
+    66% { background-position: 80px -140px; }
+    100% { background-position: 0 0; }
+  }
+  .hairline { height: 1px; background: linear-gradient(90deg, rgba(214,192,140,0.7), rgba(214,192,140,0.0)); }
+  .loader-line { animation: loadGrow 1.6s cubic-bezier(0.65,0,0.35,1) forwards; }
+  @keyframes loadGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body class="bg-black">
+
+<!-- 3D canvas mount -->
+<div id="app" class="fixed inset-0"></div>
+
+<!-- cinematic overlays -->
+<div class="vignette fixed inset-0 pointer-events-none z-30"></div>
+<div class="grain fixed inset-0 pointer-events-none z-40"></div>
+
+<!-- UI -->
+<div id="ui" class="fixed inset-0 z-20 pointer-events-none opacity-0">
+  <header class="absolute top-8 left-8 md:top-12 md:left-14">
+    <p class="font-cinzel text-[10px] md:text-[11px] tracking-[0.55em] text-[#d6c08c]/70 uppercase">Hall of Arms · North Range</p>
+    <h1 class="font-cinzel text-[#e8e2d2] text-[clamp(2.4rem,6vw,4.6rem)] leading-[1.05] mt-3 tracking-[0.08em]">THE VIGIL</h1>
+    <div class="hairline w-40 md:w-56 mt-4"></div>
+    <p class="font-cormorant italic text-[#9aa0ab] text-base md:text-lg mt-3 max-w-xs leading-snug">A full harness of plate, Milanese fashion, standing watch where the daylight falls.</p>
+  </header>
+
+  <footer class="absolute bottom-7 left-8 md:bottom-10 md:left-14 right-8 md:right-14 flex items-end justify-between">
+    <p class="font-cinzel text-[9px] md:text-[10px] tracking-[0.35em] text-[#8b9097]/80 uppercase leading-loose">
+      Drag · Orbit&ensp;&mdash;&ensp;Scroll · Zoom&ensp;&mdash;&ensp;Click the helm · Raise the visor
+    </p>
+    <p class="font-cormorant italic text-[#6d7278] text-sm hidden md:block">single source &mdash; daylight</p>
+  </footer>
+</div>
+
+<!-- loader -->
+<div id="loader" class="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center gap-6">
+  <p class="font-cinzel text-[11px] tracking-[0.6em] text-[#d6c08c]/80 uppercase">Entering the Armoury</p>
+  <div class="w-44 h-px bg-white/10 overflow-hidden">
+    <div class="loader-line h-full w-full bg-[#d6c08c]/70 origin-left"></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ============================================================
+   RENDERER / SCENE / CAMERA
+============================================================ */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.domElement.style.cursor = 'grab';
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.FogExp2(0x000000, 0.052);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 80);
+camera.position.set(1.1, 1.8, 6.6); // intro start, tweened inward
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.3, 0);           // breastplate height
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 1.3;
+controls.maxDistance = 8.5;
+controls.minPolarAngle = 0.32;
+controls.maxPolarAngle = 1.82;            // stay above the floor
+controls.autoRotate = false;              // enabled after the intro dolly
+controls.autoRotateSpeed = 0.35;
+controls.enabled = false;
+controls.addEventListener('start', () => { controls.autoRotate = false; });
+
+/* subtle environment so the steel has something to reflect */
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+/* ============================================================
+   POST-PROCESSING (bloom for the window glare)
+============================================================ */
+const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 });
+const composer = new EffectComposer(renderer, rt);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.55, 0.78);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* ============================================================
+   PROCEDURAL STONE TEXTURES
+============================================================ */
+function roundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function makeStoneTextures({ size = 1024, rows = 10, tile = 4.5, baseL = 16, dark = false } = {}) {
+  const cCol = document.createElement('canvas'); cCol.width = cCol.height = size;
+  const cBmp = document.createElement('canvas'); cBmp.width = cBmp.height = size;
+  const col = cCol.getContext('2d'), bmp = cBmp.getContext('2d');
+  col.fillStyle = dark ? '#0c0c0e' : '#111114'; col.fillRect(0, 0, size, size);
+  bmp.fillStyle = '#000'; bmp.fillRect(0, 0, size, size);
+
+  const rowH = size / rows;
+  const gap = Math.max(4, size * 0.006);
+  for (let r = 0; r < rows; r++) {
+    const bricks = 4 + Math.floor(Math.random() * 2);
+    const bw = size / bricks;
+    const off = (r % 2) * bw * 0.5;
+    for (let b = -1; b <= bricks; b++) {
+      const x = b * bw + off + (Math.random() - 0.5) * 8;
+      const y = r * rowH + (Math.random() - 0.5) * 5;
+      const w = bw - gap - Math.random() * 10;
+      const h = rowH - gap - Math.random() * 4;
+      const L = baseL + (Math.random() - 0.5) * 10;
+      const grad = col.createLinearGradient(x, y, x + w * 0.3, y + h);
+      grad.addColorStop(0, `hsl(${222 + Math.random() * 14}, ${5 + Math.random() * 7}%, ${L + 5}%)`);
+      grad.addColorStop(1, `hsl(${220 + Math.random() * 16}, ${4 + Math.random() * 6}%, ${Math.max(4, L - 6)}%)`);
+      col.fillStyle = grad;
+      roundedRect(col, x + gap / 2, y + gap / 2, w, h, 7); col.fill();
+      const bl = 120 + Math.random() * 70;
+      bmp.fillStyle = `rgb(${bl},${bl},${bl})`;
+      roundedRect(bmp, x + gap / 2, y + gap / 2, w, h, 7); bmp.fill();
+    }
+  }
+  /* speckle + mottling */
+  for (let i = 0; i < 5200; i++) {
+    const a = Math.random() * 0.05;
+    col.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a * 1.6})`;
+    col.fillRect(Math.random() * size, Math.random() * size, 1.4, 1.4);
+  }
+  for (let i = 0; i < 7; i++) {
+    const gx = Math.random() * size, gy = Math.random() * size, gr = 140 + Math.random() * 260;
+    const g = col.createRadialGradient(gx, gy, 0, gx, gy, gr);
+    g.addColorStop(0, 'rgba(0,0,0,0.22)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    col.fillStyle = g; col.fillRect(0, 0, size, size);
+  }
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  const texCol = new THREE.CanvasTexture(cCol);
+  texCol.colorSpace = THREE.SRGBColorSpace;
+  texCol.wrapS = texCol.wrapT = THREE.RepeatWrapping;
+  texCol.repeat.set(1 / tile, 1 / tile);
+  texCol.anisotropy = Math.min(8, maxAniso);
+  const texBmp = new THREE.CanvasTexture(cBmp);
+  texBmp.wrapS = texBmp.wrapT = THREE.RepeatWrapping;
+  texBmp.repeat.copy(texCol.repeat);
+  texBmp.anisotropy = texCol.anisotropy;
+  return { map: texCol, bumpMap: texBmp };
+}
+
+/* ============================================================
+   MATERIALS
+============================================================ */
+const steel = new THREE.MeshStandardMaterial({
+  color: 0xccd2d9, metalness: 1.0, roughness: 0.23, envMapIntensity: 0.38, side: THREE.DoubleSide
+});
+const steelDark = new THREE.MeshStandardMaterial({
+  color: 0x878d94, metalness: 0.95, roughness: 0.42, envMapIntensity: 0.25, side: THREE.DoubleSide
+});
+const brass = new THREE.MeshStandardMaterial({
+  color: 0x9a7a3a, metalness: 1.0, roughness: 0.34, envMapIntensity: 0.6
+});
+const leather = new THREE.MeshStandardMaterial({ color: 0x2b1a0e, roughness: 0.9, metalness: 0.0 });
+const wood = new THREE.MeshStandardMaterial({ color: 0x201205, roughness: 0.82, metalness: 0.0 });
+const blackMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+
+/* ============================================================
+   THE ROOM — floor, walls, high window
+============================================================ */
+const WALL_Z = -2.75, LEFT_X = -3.2, RIGHT_X = 3.4;
+const WIN = { cx: LEFT_X, cy: 3.45, cz: -1.05, w: 0.6, sill: 2.75, arch: 3.88, apex: 4.18 };
+
+const floorTex = makeStoneTextures({ rows: 8, tile: 6, baseL: 12, dark: true });
+floorTex.map.repeat.set(46 / 6, 46 / 6);
+floorTex.bumpMap.repeat.set(46 / 6, 46 / 6);
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(46, 46),
+  new THREE.MeshStandardMaterial({ map: floorTex.map, bumpMap: floorTex.bumpMap, bumpScale: 0.7, roughness: 0.88, metalness: 0.02, envMapIntensity: 0.05 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const wallTex = makeStoneTextures({ rows: 10, tile: 4.5, baseL: 17 });
+const wallMat = new THREE.MeshStandardMaterial({ map: wallTex.map, bumpMap: wallTex.bumpMap, bumpScale: 0.8, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.05 });
+
+/* plane walls need their own tiling (their UVs run 0..1) */
+function planeWallMat(w, h) {
+  const m = wallTex.map.clone(); m.repeat.set(w / 4.5, h / 4.5); m.needsUpdate = true;
+  const b = wallTex.bumpMap.clone(); b.repeat.set(w / 4.5, h / 4.5); b.needsUpdate = true;
+  return new THREE.MeshStandardMaterial({ map: m, bumpMap: b, bumpScale: 0.8, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.05 });
+}
+
+/* back wall — right behind the harness */
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(15, 6.5), planeWallMat(15, 6.5));
+backWall.position.set(0, 3.25, WALL_Z);
+backWall.receiveShadow = true;
+scene.add(backWall);
+
+/* right wall, lost in darkness */
+const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(9, 6.5), planeWallMat(9, 6.5));
+rightWall.rotation.y = -Math.PI / 2;
+rightWall.position.set(RIGHT_X, 3.25, 0.6);
+rightWall.receiveShadow = true;
+scene.add(rightWall);
+
+/* left wall, with a tall narrow lancet cut high into it */
+function lancetHole(path, cx, w, sill, arch, apex) {
+  const l = cx - w / 2, r = cx + w / 2;
+  path.moveTo(l, sill);
+  path.lineTo(l, arch);
+  path.quadraticCurveTo(l, apex - 0.04, cx, apex);
+  path.quadraticCurveTo(r, apex - 0.04, r, arch);
+  path.lineTo(r, sill);
+  path.closePath();
+}
+{
+  const shape = new THREE.Shape();
+  shape.moveTo(-4.6, 0); shape.lineTo(2.75, 0); shape.lineTo(2.75, 6.5); shape.lineTo(-4.6, 6.5); shape.closePath();
+  const hole = new THREE.Path();
+  lancetHole(hole, -WIN.cz, WIN.w, WIN.sill, WIN.arch, WIN.apex); // local x maps to world -z
+  shape.holes.push(hole);
+  const leftWall = new THREE.Mesh(new THREE.ShapeGeometry(shape, 24), wallMat);
+  leftWall.rotation.y = Math.PI / 2;
+  leftWall.position.set(LEFT_X, 0, 0);
+  leftWall.receiveShadow = true;
+  scene.add(leftWall);
+}
+
+/* window glass — a cool bright sky beyond */
+function lancetShape(cx, w, sill, arch, apex) {
+  const s = new THREE.Shape();
+  const l = cx - w / 2, r = cx + w / 2;
+  s.moveTo(l, sill); s.lineTo(l, arch);
+  s.quadraticCurveTo(l, apex - 0.04, cx, apex);
+  s.quadraticCurveTo(r, apex - 0.04, r, arch);
+  s.lineTo(r, sill); s.closePath();
+  return s;
+}
+{
+  const gc = document.createElement('canvas'); gc.width = 128; gc.height = 256;
+  const g = gc.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.45, '#d3e2ff'); grad.addColorStop(1, '#7d97c4');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 256);
+  const hot = g.createRadialGradient(64, 70, 4, 64, 70, 120);
+  hot.addColorStop(0, 'rgba(255,255,255,0.95)'); hot.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = hot; g.fillRect(0, 0, 128, 256);
+  const skyTex = new THREE.CanvasTexture(gc); skyTex.colorSpace = THREE.SRGBColorSpace;
+
+  const glassGeo = new THREE.ShapeGeometry(lancetShape(-WIN.cz, WIN.w - 0.05, WIN.sill + 0.03, WIN.arch, WIN.apex - 0.03), 20);
+  const glass = new THREE.Mesh(glassGeo, new THREE.MeshBasicMaterial({ map: skyTex, fog: false }));
+  glass.material.color.setRGB(2.3, 2.5, 2.9);
+  glass.rotation.y = Math.PI / 2;
+  glass.position.set(LEFT_X + 0.02, 0, 0);
+  scene.add(glass);
+
+  /* stone sill + reveals */
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, WIN.w + 0.22), wallMat);
+  sill.position.set(LEFT_X + 0.05, WIN.sill - 0.035, WIN.cz);
+  scene.add(sill);
+  const revealGeo = new THREE.BoxGeometry(0.1, WIN.arch - WIN.sill, 0.06);
+  for (const s of [-1, 1]) {
+    const rev = new THREE.Mesh(revealGeo, wallMat);
+    rev.position.set(LEFT_X + 0.03, (WIN.sill + WIN.arch) / 2, WIN.cz + s * (WIN.w / 2 + 0.03));
+    scene.add(rev);
+  }
+  /* soft halo hugging the opening */
+  const hc = document.createElement('canvas'); hc.width = hc.height = 128;
+  const hg = hc.getContext('2d');
+  const hgr = hg.createRadialGradient(64, 64, 2, 64, 64, 64);
+  hgr.addColorStop(0, 'rgba(190,212,255,0.85)'); hgr.addColorStop(1, 'rgba(190,212,255,0)');
+  hg.fillStyle = hgr; hg.fillRect(0, 0, 128, 128);
+  const halo = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 3.4),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hc), transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })
+  );
+  halo.rotation.y = Math.PI / 2;
+  halo.position.set(LEFT_X + 0.06, WIN.cy, WIN.cz);
+  scene.add(halo);
+}
+
+/* ============================================================
+   THE HARNESS — full plate on its stand
+============================================================ */
+const armour = new THREE.Group();
+scene.add(armour);
+
+function lathe(profile, mat, seg = 48) {
+  const pts = profile.map(p => new THREE.Vector2(p[0], p[1]));
+  const m = new THREE.Mesh(new THREE.LatheGeometry(pts, seg), mat);
+  m.castShadow = true;
+  return m;
+}
+function addMesh(geo, mat, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  return m;
+}
+
+/* the stand — dark oak post, crossbar and base */
+{
+  const base = addMesh(new THREE.CylinderGeometry(0.32, 0.36, 0.05, 28), wood, 0, 0.025, 0);
+  const post = addMesh(new THREE.CylinderGeometry(0.032, 0.038, 1.56, 12), wood, 0, 0.83, -0.02);
+  const bar = addMesh(new THREE.BoxGeometry(0.88, 0.05, 0.05), wood, 0, 1.45, -0.01);
+  base.receiveShadow = true;
+  armour.add(base, post, bar);
+}
+
+/* cuirass — shaped breastplate with a central tapul ridge */
+{
+  const prof = [
+    [0.152, 0.00], [0.168, 0.05], [0.186, 0.13], [0.201, 0.22], [0.211, 0.32],
+    [0.208, 0.40], [0.196, 0.47], [0.172, 0.53], [0.140, 0.58], [0.118, 0.62], [0.112, 0.65]
+  ];
+  const pts = prof.map(p => new THREE.Vector2(p[0], p[1]));
+  const geo = new THREE.LatheGeometry(pts, 64);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    let x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    x *= 1.18; z *= 0.74;                                   // torso ellipse
+    const t = THREE.MathUtils.clamp((y - 0.08) / 0.44, 0, 1);
+    const s = Math.sin(t * Math.PI);
+    if (z > 0) {
+      z += s * 0.055 * (z / 0.21);                          // chest swells forward
+      z += Math.exp(-Math.pow(x / 0.028, 2)) * 0.013 * s;   // tapul ridge
+    }
+    pos.setXYZ(i, x, y, z);
+  }
+  geo.computeVertexNormals();
+  const cuirass = new THREE.Mesh(geo, steel);
+  cuirass.position.y = 0.92;
+  cuirass.castShadow = true;
+  armour.add(cuirass);
+}
+
+/* fauld — three flaring lames at the waist, with brass rivets */
+const rivetGeo = new THREE.SphereGeometry(0.0052, 8, 8);
+function rivetArc(R, y, scaleX, scaleZ, count, parent) {
+  for (let i = 0; i < count; i++) {
+    const a = -0.85 + (i / (count - 1)) * 1.7;
+    const r = addMesh(rivetGeo, brass, Math.sin(a) * R * scaleX, y, Math.cos(a) * R * scaleZ + 0.004);
+    parent.add(r);
+  }
+}
+{
+  const lames = [
+    { r: 0.166, y: 1.005 },
+    { r: 0.174, y: 0.949 },
+    { r: 0.182, y: 0.893 }
+  ];
+  for (const { r, y } of lames) {
+    const lame = lathe([[r, 0], [r + 0.008, -0.028], [r + 0.016, -0.058]], steel, 48);
+    lame.scale.set(1.18, 1, 0.74);
+    lame.position.y = y;
+    armour.add(lame);
+    rivetArc(r + 0.014, y - 0.046, 1.18, 0.74, 7, armour);
+  }
+}
+
+/* gorget at the throat */
+{
+  const gorget = lathe([[0.112, 0], [0.116, 0.045], [0.125, 0.085], [0.133, 0.115]], steel, 48);
+  gorget.scale.set(1.08, 1, 0.95);
+  gorget.position.y = 1.462;
+  armour.add(gorget);
+  rivetArc(0.13, 1.562, 1.08, 0.95, 9, armour);
+}
+
+/* helmet — rounded armet skull; visor hangs from temple pivots */
+const visorPivot = new THREE.Group();
+visorPivot.position.set(0, 1.665, 0.02);
+const pickTargets = [];
+{
+  const skull = lathe([
+    [0.098, 0.00], [0.110, 0.03], [0.118, 0.07], [0.121, 0.105],
+    [0.113, 0.14], [0.096, 0.17], [0.062, 0.195], [0.02, 0.212], [0.001, 0.216]
+  ], steel, 48);
+  skull.scale.set(1, 1, 1.09);
+  skull.position.y = 1.565;
+  armour.add(skull);
+  pickTargets.push(skull);
+
+  const C = new THREE.Vector3(0, 1.665, 0.012), R = 0.133;
+  const visorGeo = new THREE.SphereGeometry(R, 40, 24, Math.PI / 2 - 0.62, 1.24, 0.92, 1.05);
+  const visor = new THREE.Mesh(visorGeo, steel);
+  visor.castShadow = true;
+  visor.position.copy(C).sub(visorPivot.position);
+  visorPivot.add(visor);
+  pickTargets.push(visor);
+
+  /* sight slits */
+  const slit1 = addMesh(new THREE.BoxGeometry(0.135, 0.009, 0.02), blackMat);
+  const slit2 = addMesh(new THREE.BoxGeometry(0.105, 0.006, 0.02), blackMat);
+  slit1.position.set(0, C.y + 0.014, C.z + 0.122).sub(visorPivot.position);
+  slit2.position.set(0, C.y - 0.018, C.z + 0.127).sub(visorPivot.position);
+  visorPivot.add(slit1, slit2);
+
+  /* breath holes — two rows of dark piercings */
+  const holeGeo = new THREE.CircleGeometry(0.0042, 10);
+  for (const theta of [1.78, 1.92]) {
+    for (let i = 0; i < 5; i++) {
+      const phi = -0.42 + i * 0.21;
+      const p = new THREE.Vector3(
+        R * Math.sin(theta) * Math.sin(phi),
+        R * Math.cos(theta),
+        R * Math.sin(theta) * Math.cos(phi)
+      );
+      const h = new THREE.Mesh(holeGeo, blackMat);
+      h.position.copy(C).add(p).sub(visorPivot.position);
+      h.lookAt(C.clone().add(p.clone().multiplyScalar(2)).sub(visorPivot.position));
+      visorPivot.add(h);
+    }
+  }
+  armour.add(visorPivot);
+}
+
+/* pauldrons — three lames draping each shoulder */
+for (const side of [1, -1]) {
+  const lames = [
+    { r: 0.152, th: 1.02, len: 1.28, y: 1.487, x: 0.243 },
+    { r: 0.165, th: 1.30, len: 1.36, y: 1.434, x: 0.254 },
+    { r: 0.178, th: 1.55, len: 1.44, y: 1.383, x: 0.262 }
+  ];
+  for (const L of lames) {
+    const geo = new THREE.SphereGeometry(L.r, 32, 16, 0, Math.PI * 2, 0, L.len);
+    geo.rotateZ(-side * L.th);
+    geo.rotateY(-side * 0.3);
+    const shell = new THREE.Mesh(geo, steel);
+    shell.position.set(side * L.x, L.y, 0.005);
+    shell.castShadow = true;
+    armour.add(shell);
+  }
+  armour.add(addMesh(new THREE.SphereGeometry(0.056, 20, 16), steel, side * 0.235, 1.44, 0));
+}
+
+/* arms — rerebrace, couter with wing, vambrace, gauntlet */
+for (const side of [1, -1]) {
+  const upper = addMesh(new THREE.CylinderGeometry(0.052, 0.058, 0.26, 20), steel, side * 0.262, 1.30, 0);
+  upper.rotation.z = -side * 0.05;
+  armour.add(upper);
+
+  const couter = addMesh(new THREE.SphereGeometry(0.063, 20, 16), steel, side * 0.274, 1.16, 0.005);
+  couter.scale.set(1, 0.92, 1);
+  armour.add(couter);
+  const wingGeo = new THREE.ConeGeometry(0.045, 0.075, 14);
+  wingGeo.rotateZ(-side * Math.PI / 2);
+  armour.add(addMesh(wingGeo, steel, side * 0.315, 1.16, 0.005));
+
+  const fore = addMesh(new THREE.CylinderGeometry(0.047, 0.041, 0.26, 20), steel, side * 0.282, 1.005, 0.012);
+  fore.rotation.z = -side * 0.04;
+  armour.add(fore);
+
+  const cuff = addMesh(new THREE.CylinderGeometry(0.05, 0.054, 0.07, 18), steel, side * 0.287, 0.862, 0.02);
+  armour.add(cuff);
+  const fist = addMesh(new THREE.SphereGeometry(0.062, 18, 14), steel, side * 0.29, 0.79, 0.03);
+  fist.scale.set(0.85, 1.28, 0.95);
+  armour.add(fist);
+  const thumb = addMesh(new THREE.CapsuleGeometry(0.013, 0.045, 4, 8), steel, side * 0.258, 0.80, 0.062);
+  thumb.rotation.z = side * 0.5;
+  armour.add(thumb);
+}
+
+/* legs — cuisse, poleyn, greave, sabaton */
+for (const side of [1, -1]) {
+  const cuisse = addMesh(new THREE.CylinderGeometry(0.092, 0.08, 0.34, 22), steel, side * 0.11, 0.72, 0);
+  cuisse.scale.z = 1.08;
+  cuisse.rotation.z = -side * 0.025;
+  armour.add(cuisse);
+
+  const poleyn = addMesh(new THREE.SphereGeometry(0.078, 20, 16), steel, side * 0.106, 0.527, 0.012);
+  poleyn.scale.set(1, 0.9, 1.05);
+  armour.add(poleyn);
+
+  const greave = addMesh(new THREE.CylinderGeometry(0.072, 0.056, 0.35, 22), steel, side * 0.104, 0.335, 0);
+  greave.scale.z = 1.14;
+  armour.add(greave);
+
+  const foot = addMesh(new THREE.SphereGeometry(0.07, 20, 16), steel, side * 0.107, 0.10, 0.06);
+  foot.scale.set(0.82, 0.68, 1.7);
+  armour.add(foot);
+  const toeGeo = new THREE.ConeGeometry(0.048, 0.17, 16);
+  toeGeo.rotateX(Math.PI / 2);
+  const toe = new THREE.Mesh(toeGeo, steel);
+  toe.scale.set(0.9, 0.55, 1);
+  toe.position.set(side * 0.107, 0.082, 0.235);
+  toe.castShadow = true;
+  armour.add(toe);
+  armour.add(addMesh(new THREE.SphereGeometry(0.045, 14, 12), steel, side * 0.107, 0.135, -0.015));
+}
+
+/* ============================================================
+   WEAPON RACK — off to the right, nearly lost in the dark
+============================================================ */
+{
+  const rack = new THREE.Group();
+  rack.position.set(2.45, 0, -0.55);
+  rack.rotation.y = -0.5;
+  scene.add(rack);
+
+  const postG = new THREE.BoxGeometry(0.07, 1.55, 0.07);
+  for (const s of [-1, 1]) {
+    rack.add(addMesh(postG, wood, s * 0.75, 0.775, 0));
+    rack.add(addMesh(new THREE.BoxGeometry(0.07, 0.06, 0.52), wood, s * 0.75, 0.03, 0));
+  }
+  rack.add(addMesh(new THREE.BoxGeometry(1.62, 0.06, 0.05), wood, 0, 1.32, 0));
+  rack.add(addMesh(new THREE.BoxGeometry(1.62, 0.06, 0.05), wood, 0, 0.55, 0));
+
+  const bladeSteel = new THREE.MeshStandardMaterial({ color: 0xb9c0c8, metalness: 1.0, roughness: 0.28, envMapIntensity: 0.55 });
+
+  function makeSword() {
+    const g = new THREE.Group();
+    const tipGeo = new THREE.CylinderGeometry(0.0135, 0.0006, 0.1, 4);
+    tipGeo.rotateY(Math.PI / 4);
+    const tip = addMesh(tipGeo, bladeSteel, 0, 0.05, 0);
+    tip.scale.z = 0.32;
+    const blGeo = new THREE.CylinderGeometry(0.016, 0.02, 0.8, 4);
+    blGeo.rotateY(Math.PI / 4);
+    const blade = addMesh(blGeo, bladeSteel, 0, 0.5, 0);
+    blade.scale.z = 0.32;
+    const guard = addMesh(new THREE.BoxGeometry(0.2, 0.018, 0.03), steelDark, 0, 0.915, 0);
+    const grip = addMesh(new THREE.CylinderGeometry(0.014, 0.015, 0.15, 10), leather, 0, 1.0, 0);
+    const pommel = addMesh(new THREE.SphereGeometry(0.023, 12, 10), steelDark, 0, 1.085, 0);
+    g.add(tip, blade, guard, grip, pommel);
+    return g;
+  }
+  const swordSpots = [[-0.55, -0.19, 0.30], [-0.05, -0.23, 0.31], [0.42, -0.17, 0.29]];
+  for (const [x, rx, z] of swordSpots) {
+    const sw = makeSword();
+    sw.position.set(x, 0, z);
+    sw.rotation.x = rx;
+    sw.rotation.z = (Math.random() - 0.5) * 0.05;
+    rack.add(sw);
+  }
+
+  /* halberd leaning at the end */
+  const pole = addMesh(new THREE.CylinderGeometry(0.017, 0.02, 2.05, 10), wood, 0.9, 1.02, 0.16);
+  pole.rotation.z = 0.13;
+  rack.add(pole);
+  const axeGeo = new THREE.CylinderGeometry(0.115, 0.115, 0.008, 20, 1, false, -1.05, 2.1);
+  axeGeo.rotateX(Math.PI / 2);
+  const axe = addMesh(axeGeo, bladeSteel, 1.03, 1.72, 0.16);
+  axe.rotation.z = 0.13;
+  rack.add(axe);
+  const spikeGeo = new THREE.ConeGeometry(0.02, 0.2, 10);
+  const spike = addMesh(spikeGeo, bladeSteel, 1.155, 2.02, 0.16);
+  spike.rotation.z = 0.13;
+  rack.add(spike);
+
+  /* heater shield hung on the rail */
+  const sh = new THREE.Shape();
+  sh.moveTo(-0.2, 0.26); sh.lineTo(0.2, 0.26);
+  sh.quadraticCurveTo(0.21, 0.04, 0.13, -0.08);
+  sh.quadraticCurveTo(0.06, -0.2, 0, -0.26);
+  sh.quadraticCurveTo(-0.06, -0.2, -0.13, -0.08);
+  sh.quadraticCurveTo(-0.21, 0.04, -0.2, 0.26);
+  const shield = addMesh(new THREE.ExtrudeGeometry(sh, { depth: 0.016, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.006 }), steelDark, 0.28, 0.98, 0.07);
+  shield.rotation.x = 0.06;
+  const boss = addMesh(new THREE.SphereGeometry(0.045, 14, 12), brass, 0.28, 1.0, 0.095);
+  boss.scale.z = 0.6;
+  rack.add(boss);
+  rack.traverse(o => { if (o.isMesh) o.castShadow = true; });
+}
+
+/* ============================================================
+   LIGHT — one shaft of daylight, and almost nothing else
+============================================================ */
+const WIN_POS = new THREE.Vector3(WIN.cx, WIN.cy, WIN.cz);
+const TARGET = new THREE.Vector3(0, 1.32, 0.02);
+const SHAFT_DIR = TARGET.clone().sub(WIN_POS).normalize();
+const shaftLen = WIN_POS.y / -SHAFT_DIR.y;
+const FLOOR_HIT = WIN_POS.clone().addScaledVector(SHAFT_DIR, shaftLen);
+const SHAFT_MID = WIN_POS.clone().add(FLOOR_HIT).multiplyScalar(0.5);
+const shaftQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), SHAFT_DIR);
+
+const spot = new THREE.SpotLight(0xdfe9ff, 46, 0, 0.175, 0.55, 0);
+spot.position.set(WIN.cx + 0.16, WIN.cy, WIN.cz);
+spot.target.position.copy(TARGET);
+spot.castShadow = true;
+spot.shadow.mapSize.set(2048, 2048);
+spot.shadow.bias = -0.0004;
+spot.shadow.camera.near = 1;
+spot.shadow.camera.far = 14;
+scene.add(spot, spot.target);
+
+/* cool spill licking the stones around the window */
+const winGlow = new THREE.PointLight(0xbdd2ff, 2.6, 4.5, 2);
+winGlow.position.set(WIN.cx + 0.3, WIN.cy, WIN.cz);
+scene.add(winGlow);
+
+/* the faintest whisper of fill so silhouettes barely read */
+scene.add(new THREE.HemisphereLight(0x222a38, 0x0a0806, 0.16));
+const fill = new THREE.DirectionalLight(0x8fa0c0, 0.12);
+fill.position.set(4, 3.5, 5);
+scene.add(fill);
+
+/* ============================================================
+   VOLUMETRIC SHAFT — two soft cones of daylight
+============================================================ */
+const shaftUniformsList = [];
+function makeShaftCone(rFloor, rWin, intensity) {
+  const geo = new THREE.CylinderGeometry(rFloor, rWin, shaftLen, 36, 1, true);
+  const uniforms = {
+    uTime: { value: 0 },
+    uLen: { value: shaftLen },
+    uColor: { value: new THREE.Color(0xcfdcff) },
+    uIntensity: { value: intensity }
+  };
+  shaftUniformsList.push(uniforms);
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    vertexShader: `
+      uniform float uLen;
+      varying vec3 vN; varying vec3 vW; varying float vAlong;
+      void main(){
+        vN = normalize(mat3(modelMatrix) * normal);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vW = wp.xyz;
+        vAlong = position.y / uLen + 0.5;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform float uTime; uniform vec3 uColor; uniform float uIntensity;
+      varying vec3 vN; varying vec3 vW; varying float vAlong;
+      void main(){
+        vec3 V = normalize(cameraPosition - vW);
+        float soft = pow(abs(dot(normalize(vN), V)), 1.35);
+        float caps = smoothstep(0.0, 0.07, vAlong) * (1.0 - smoothstep(0.88, 1.0, vAlong));
+        float grad = mix(1.0, 0.42, vAlong) + smoothstep(0.86, 1.0, vAlong) * 0.35;
+        float shimmer = 0.82 + 0.18 * sin(vW.y * 7.0 - uTime * 0.55 + sin(vW.x * 4.0 + uTime * 0.3));
+        gl_FragColor = vec4(uColor, soft * caps * grad * shimmer * uIntensity);
+      }`
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(SHAFT_MID);
+  mesh.quaternion.copy(shaftQuat);
+  mesh.renderOrder = 5;
+  scene.add(mesh);
+  return mesh;
+}
+makeShaftCone(0.98, 0.36, 0.085);
+makeShaftCone(0.52, 0.19, 0.17);
+
+/* ============================================================
+   DUST — motes drifting down through the beam
+============================================================ */
+let dustUniforms;
+{
+  const COUNT = 700;
+  const pos = new Float32Array(COUNT * 3);
+  const seed = new Float32Array(COUNT * 3);
+  const size = new Float32Array(COUNT);
+  for (let i = 0; i < COUNT; i++) {
+    const y = Math.random() * shaftLen;
+    const rAt = THREE.MathUtils.lerp(0.3, 0.88, y / shaftLen);
+    const rf = 0.4 + Math.random() * 0.95;
+    const a = Math.random() * Math.PI * 2;
+    const rr = rAt * rf * Math.sqrt(Math.random());
+    pos[i * 3] = Math.cos(a) * rr;
+    pos[i * 3 + 1] = y - shaftLen / 2;
+    pos[i * 3 + 2] = Math.sin(a) * rr;
+    seed[i * 3] = Math.random();
+    seed[i * 3 + 1] = Math.random();
+    seed[i * 3 + 2] = rf;
+    size[i] = 3.5 + Math.random() * 6.5;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 3));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+
+  dustUniforms = {
+    uTime: { value: 0 },
+    uLen: { value: shaftLen },
+    uPixelRatio: { value: renderer.getPixelRatio() },
+    uColor: { value: new THREE.Color(0xe4ebff) },
+    uOpacity: { value: 0.5 }
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: dustUniforms,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    vertexShader: `
+      attribute vec3 aSeed; attribute float aSize;
+      uniform float uTime; uniform float uLen; uniform float uPixelRatio;
+      varying float vAlpha;
+      void main(){
+        vec3 p = position;
+        float ph = aSeed.x * 6.28318;
+        float sp = 0.028 + aSeed.y * 0.055;
+        float y01 = mod(p.y + uLen * 0.5 + uTime * sp, uLen);
+        p.y = y01 - uLen * 0.5;
+        p.x += sin(uTime * (0.14 + aSeed.y * 0.22) + ph) * 0.085;
+        p.z += cos(uTime * (0.11 + aSeed.x * 0.19) + ph * 1.7) * 0.085;
+        float ends = smoothstep(0.12, 0.85, y01) * (1.0 - smoothstep(uLen - 1.5, uLen - 0.25, y01));
+        float flicker = 0.5 + 0.5 * sin(uTime * (0.5 + aSeed.y * 0.8) + ph * 3.1);
+        vAlpha = ends * flicker / pow(aSeed.z, 1.25);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = aSize * uPixelRatio * (210.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uOpacity;
+      varying float vAlpha;
+      void main(){
+        float d = length(gl_PointCoord - 0.5);
+        float a = (1.0 - smoothstep(0.04, 0.5, d)) * vAlpha * uOpacity;
+        gl_FragColor = vec4(uColor, a);
+      }`
+  });
+  const dust = new THREE.Points(geo, mat);
+  dust.position.copy(SHAFT_MID);
+  dust.quaternion.copy(shaftQuat);
+  dust.renderOrder = 6;
+  scene.add(dust);
+}
+
+/* ============================================================
+   INTERACTION — click the helm to raise / lower the visor
+============================================================ */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let visorOpen = false, downX = 0, downY = 0;
+
+function setPointer(e) {
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+}
+function helmHit(e) {
+  setPointer(e);
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.intersectObjects(pickTargets, true).length > 0;
+}
+function toggleVisor() {
+  visorOpen = !visorOpen;
+  gsap.to(visorPivot.rotation, {
+    x: visorOpen ? -1.82 : 0,
+    duration: visorOpen ? 1.25 : 0.9,
+    ease: visorOpen ? 'power3.inOut' : 'power2.in'
+  });
+}
+renderer.domElement.addEventListener('pointerdown', e => { downX = e.clientX; downY = e.clientY; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (Math.hypot(e.clientX - downX, e.clientY - downY) < 6 && helmHit(e)) toggleVisor();
+});
+let hoverQueued = false;
+renderer.domElement.addEventListener('pointermove', e => {
+  if (hoverQueued) return;
+  hoverQueued = true;
+  requestAnimationFrame(() => {
+    renderer.domElement.style.cursor = helmHit(e) ? 'pointer' : 'grab';
+    hoverQueued = false;
+  });
+});
+
+/* ============================================================
+   RESIZE / ANIMATE
+============================================================ */
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  dustUniforms.uPixelRatio.value = renderer.getPixelRatio();
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  controls.update();
+  for (const u of shaftUniformsList) u.uTime.value = t;
+  dustUniforms.uTime.value = t;
+  composer.render();
+}
+animate();
+
+/* intro — camera drifts in from the dark, UI fades up */
+const camGoal = { x: 0, y: 1.62, z: 4.4 };
+gsap.to(camera.position, {
+  ...camGoal,
+  duration: 2.8,
+  ease: 'power2.inOut',
+  delay: 0.7,
+  onComplete: () => { controls.enabled = true; controls.autoRotate = true; }
+});
+gsap.to('#loader', { autoAlpha: 0, duration: 1.1, delay: 0.9, ease: 'power2.out' });
+gsap.to('#ui', { opacity: 1, duration: 1.6, delay: 1.5, ease: 'power2.out' });
+</script>
+</body>
+</html>
