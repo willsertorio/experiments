@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes">
+    <title>Project Firewall</title>
+    <style>
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #05070c; }
+      #unity-container { position: fixed; inset: 0; }
+      #unity-canvas { width: 100%; height: 100%; display: block; background: #05070c; outline: none; }
+      /* splash / loading screen: one bar for the download and the procedural generation, with the current stage */
+      #unity-loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 14px; background: radial-gradient(ellipse at 50% 55%, #07190e 0%, #05070c 70%); color: #8cf5a0;
+        font-family: "Bahnschrift", "Segoe UI", Roboto, Arial, sans-serif; letter-spacing: .4em; font-size: 13px; transition: opacity .7s; }
+      #unity-loading.done { opacity: 0; pointer-events: none; }
+      #unity-loading .kicker { font-size: 11px; letter-spacing: .6em; color: rgba(140, 245, 160, .55); }
+      #unity-loading .title { font-size: 44px; letter-spacing: .1em; font-weight: 700; color: #e2ffdc; text-shadow: 0 0 22px rgba(74, 255, 104, .45); margin-bottom: 10px; }
+      #unity-loading .sub { font-size: 12px; letter-spacing: .5em; color: rgba(226, 255, 220, .6); margin-bottom: 22px; }
+      #unity-bar { position: relative; width: min(460px, 72vw); height: 6px; background: rgba(74, 255, 104, .12);
+        border: 1px solid rgba(74, 255, 104, .35); clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+      #unity-bar-fill { width: 0; height: 100%; background: linear-gradient(90deg, #2fd95a, #a6ffb4); box-shadow: 0 0 14px rgba(120, 255, 140, .8); transition: width .25s ease-out; }
+      #unity-row { display: flex; justify-content: space-between; width: min(460px, 72vw); font-size: 12px; }
+      #unity-status { color: #c8ffd0; }
+      #unity-pct { color: rgba(226, 255, 220, .7); letter-spacing: .2em; }
+      #unity-start { display: none; margin-top: 30px; padding: 12px 34px; font-size: 14px; letter-spacing: .5em; color: #e2ffdc;
+        border: 1px solid rgba(74, 255, 104, .6); background: rgba(4, 30, 13, .5); cursor: pointer; user-select: none;
+        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); animation: fw-pulse 1.6s ease-in-out infinite; }
+      #unity-loading.armed { cursor: pointer; }
+      #unity-loading.armed #unity-start { display: block; }
+      @keyframes fw-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(74, 255, 104, .25); } 50% { box-shadow: 0 0 26px rgba(74, 255, 104, .7); } }
+      #unity-warning { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 10; font-family: Arial, sans-serif; font-size: 13px; }
+      #unity-warning div { margin-bottom: 6px; padding: 8px 12px; border-radius: 3px; color: #111; }
+    </style>
+  </head>
+  <body>
+    <div id="unity-container">
+      <canvas id="unity-canvas" tabindex="-1"></canvas>
+      <div id="unity-loading">
+        <div class="kicker">CONTAINMENT FACILITY 07</div>
+        <div class="title">PROJECT FIREWALL</div>
+        <div class="sub">QUARANTINE BREACH RESPONSE</div>
+        <div id="unity-bar"><div id="unity-bar-fill"></div></div>
+        <div id="unity-row"><span id="unity-status">ESTABLISHING LINK</span><span id="unity-pct">0%</span></div>
+        <div id="unity-start">CLICK TO START</div>
+      </div>
+      <div id="unity-warning"></div>
+    </div>
+    <script>
+      // Pointer lock is refused in some embeds (iframes without allow="pointer-lock", webviews). Unity's cursor
+      // lock would then surface an unhandled promise rejection and stop the player; make it a silent no-op instead.
+      (function () {
+        var proto = window.Element && Element.prototype, orig = proto && proto.requestPointerLock;
+        if (!orig) return;
+        proto.requestPointerLock = function () {
+          try { var p = orig.apply(this, arguments); return (p && typeof p.catch === "function") ? p.catch(function () {}) : p; }
+          catch (e) { return Promise.resolve(); }
+        };
+      })();
+      window.addEventListener("unhandledrejection", function (e) {
+        var msg = String((e.reason && e.reason.message) || e.reason || "");
+        if (/pointer lock/i.test(msg)) e.preventDefault();
+      });
+
+      var canvas = document.querySelector("#unity-canvas");
+      var loading = document.querySelector("#unity-loading"), fill = document.querySelector("#unity-bar-fill");
+      var status = document.querySelector("#unity-status"), pct = document.querySelector("#unity-pct");
+      function unityShowBanner(msg, type) {
+        var warningBanner = document.querySelector("#unity-warning");
+        var div = document.createElement("div");
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == "error") div.style.background = "#ff6b5a";
+        else {
+          div.style.background = "#ffd36b";
+          setTimeout(function () { warningBanner.removeChild(div); }, 5000);
+        }
+      }
+
+      // One bar: the download is the first 35%, the game's own generation stages (reported through Firewall.jslib) the rest.
+      var DOWNLOAD_SHARE = 0.35, shown = 0;
+      function setBar(f, text) {
+        f = Math.max(shown, Math.min(1, f)); shown = f;   // never runs backwards
+        fill.style.width = (100 * f) + "%"; pct.textContent = Math.round(100 * f) + "%";
+        if (text) status.textContent = text;
+      }
+      window.firewallProgress = function (msg, fraction) { setBar(DOWNLOAD_SHARE + (1 - DOWNLOAD_SHARE) * fraction, msg); };
+      // Ready: the overlay turns into a "click to start" gate. Browsers only let audio play after a user gesture, so the
+      // menu (and its music) is reached through this click; the same click is what Unity's audio backend resumes on.
+      var armed = false;
+      window.firewallReady = function () {
+        if (armed) return; armed = true;
+        setBar(1, "LINK ESTABLISHED"); loading.classList.add("armed");
+        function start(e) {
+          if (e && e.type === "keydown" && (e.key === "Tab" || e.altKey || e.ctrlKey || e.metaKey)) return;
+          // The game polls this (Firewall.jslib) and holds its music until the gesture has unlocked the audio context.
+          window.firewallStartedAt = Date.now();
+          loading.classList.remove("armed"); loading.classList.add("done"); canvas.focus();
+          // Fullscreen on the start gesture: the Keyboard Lock below only takes effect in element fullscreen, and it is the
+          // one way a page can keep Ctrl+W / Ctrl+T / Ctrl+Tab from closing or leaving the tab (Chrome / Edge; Esc leaves).
+          try { var fs = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen({ navigationUI: "hide" }); if (fs && fs.catch) fs.catch(function () {}); } catch (x) {}
+          window.removeEventListener("keydown", start); loading.removeEventListener("pointerdown", start);
+        }
+        loading.addEventListener("pointerdown", start); window.addEventListener("keydown", start);
+      };
+
+      // ---------------------------------------------------------------- browser hotkeys while playing
+      // Shift is aim and a stray Ctrl is easy to hit, so Ctrl+S / Ctrl+D / Ctrl+E / Ctrl+R / Ctrl+1 and plain Tab, Space,
+      // Alt and the F-keys would otherwise save the page, bookmark it, focus the address bar, reload, switch tabs, move
+      // focus or open the menu bar mid-fight (crouch moved from Ctrl to C for the same reason: Ctrl+W closes the tab). While the game reports a run in progress (Firewall.jslib FirewallCapture) or the pointer
+      // is locked to the canvas, every key event is marked handled before the browser acts on it; Unity still receives
+      // them (capture-phase listener, no stopPropagation). Esc stays with the browser (it releases pointer lock; the game
+      // pauses on it anyway), F11 keeps toggling fullscreen and F12 / Ctrl+Shift+I keep the dev tools reachable.
+      // Ctrl+W, Ctrl+T, Ctrl+N and Ctrl+Tab are reserved by the browser and cannot be cancelled by a page outside the
+      // Keyboard Lock API (fullscreen only): those get a "leave site?" confirmation instead, and the lock is requested
+      // so that an element-fullscreen session captures them too.
+      var captureOn = false, keyLockHeld = false;
+      // a run in progress, the pointer locked to the canvas, or the fullscreen the start click entered (title screen included)
+      function inGame() { return captureOn || document.pointerLockElement === canvas || !!document.fullscreenElement; }
+      var LOCK_KEYS = (function () {
+        var k = ["Tab", "Space", "Enter", "Backspace", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "AltLeft", "AltRight",
+                 "MetaLeft", "MetaRight", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Minus", "Equal", "NumpadEnter"];
+        for (var c = 65; c <= 90; c++) k.push("Key" + String.fromCharCode(c));
+        for (var d = 0; d <= 9; d++) { k.push("Digit" + d); k.push("Numpad" + d); }
+        for (var f = 1; f <= 10; f++) k.push("F" + f);   // not F11 (fullscreen) / F12 (dev tools) / Escape
+        return k;
+      })();
+      function syncKeyLock() {
+        var kb = navigator.keyboard; if (!kb || typeof kb.lock !== "function") return;
+        try {
+          if (inGame()) { if (!keyLockHeld) { keyLockHeld = true; var p = kb.lock(LOCK_KEYS); if (p && p.catch) p.catch(function () {}); } }
+          else if (keyLockHeld) { keyLockHeld = false; kb.unlock(); }
+        } catch (e) {}
+      }
+      window.firewallCapture = function (on) { captureOn = !!on; syncKeyLock(); };
+      document.addEventListener("pointerlockchange", syncKeyLock);
+      document.addEventListener("fullscreenchange", syncKeyLock);
+      function guardKey(e) {
+        if (!inGame()) return;
+        var code = e.code || e.key;
+        if (code === "Escape" || code === "F11" || code === "F12") return;
+        if (e.ctrlKey && e.shiftKey && (code === "KeyI" || code === "KeyJ" || code === "KeyC")) return;   // dev tools
+        e.preventDefault();
+      }
+      window.addEventListener("keydown", guardKey, true);
+      window.addEventListener("keyup", guardKey, true);        // Alt release is what opens Firefox's menu bar
+      window.addEventListener("wheel", function (e) { if (inGame()) e.preventDefault(); }, { capture: true, passive: false });   // Ctrl+wheel zoom
+      window.addEventListener("contextmenu", function (e) { if (inGame()) e.preventDefault(); }, true);   // right mouse button aims
+      function guardMouse(e) { if (inGame() && e.button !== 0 && e.button !== 2) e.preventDefault(); }   // middle: autoscroll, 3/4: back/forward
+      window.addEventListener("mousedown", guardMouse, true);
+      window.addEventListener("mouseup", guardMouse, true);
+      window.addEventListener("auxclick", guardMouse, true);
+      // once the game has started, leaving the page (a Ctrl+W that got through, a closed window) asks first
+      window.addEventListener("beforeunload", function (e) { if (inGame() || window.firewallStartedAt) { e.preventDefault(); e.returnValue = ""; } });
+
+      // The browser's limit is fill rate: the per-pixel lab surfaces, ambient occlusion and the post stack all scale
+      // with the backing store. Cap it by pixel count (about 1080p) rather than by device pixel ratio, so a 4K or a
+      // high-DPI laptop screen renders the same number of pixels as a 1080p monitor. `?px=` sets the budget.
+      var params = new URLSearchParams(window.location.search);
+      var MAX_PIXELS = parseFloat(params.get("px")) || 2.1e6;
+      function backingRatio() {
+        var d = Math.min(window.devicePixelRatio || 1, 1.5), w = window.innerWidth || 1280, h = window.innerHeight || 720;
+        var s = Math.sqrt(MAX_PIXELS / (w * h * d * d));
+        return s < 1 ? d * s : d;
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/45a1beab4020eacee7e2fd6aad3c8d01.loader.js";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/c644aa606eb6c6981842051fae2d530d.data.unityweb",
+        frameworkUrl: buildUrl + "/a89ada16d7199ca0981b3552d3f439e8.framework.js.unityweb",
+        codeUrl: buildUrl + "/0b19f38cbcd3bfc1ebb4d9f07e318f00.wasm.unityweb",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "Project Firewall",
+        productName: "Project Firewall",
+        productVersion: "0.1.0",
+        showBanner: unityShowBanner,
+        errorHandler: function (err) { return /pointer lock/i.test(String(err)); },
+        devicePixelRatio: backingRatio()
+      };
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = function () {
+        createUnityInstance(canvas, config, function (progress) {
+          setBar(DOWNLOAD_SHARE * progress, progress < 1 ? "DOWNLOADING" : "STARTING");
+        }).then(function (unityInstance) {
+          window.unityInstance = unityInstance;
+          setBar(DOWNLOAD_SHARE, "GENERATING");
+          setTimeout(window.firewallReady, 90000);   // never leave the overlay up if the handshake is lost
+        }).catch(function (message) {
+          unityShowBanner(message, "error");
+        });
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>
