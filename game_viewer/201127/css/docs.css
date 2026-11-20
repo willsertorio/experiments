@@ -243,3 +243,10 @@ details.sec > summary { padding: 14px 4px; gap: 12px; }
 .step dd li { margin: 2px 0; }
 @media (max-width: 479px) { .step dl { grid-template-columns: 1fr; gap: 2px; } .step dd { margin-bottom: 8px; } }
 .doc .boxes { padding-left: 0; }
+
+/* MODEL RUBRICS: verdict source tags */
+table.rubric .na { color: var(--ink-2); }
+table.rubric .src { font: 500 10.5px/1.4 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); }
+table.rubric td.c .src { margin-top: 4px; font-size: 10px; font-weight: 400; white-space: nowrap; }
+table.rubric td.cm .src { margin-right: 4px; color: var(--ink); }
+details.sec + details.sec { margin-top: 0; }
