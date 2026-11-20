@@ -250,3 +250,11 @@ table.rubric .src { font: 500 10.5px/1.4 var(--mono); text-transform: uppercase;
 table.rubric td.c .src { margin-top: 4px; font-size: 10px; font-weight: 400; white-space: nowrap; }
 table.rubric td.cm .src { margin-right: 4px; color: var(--ink); }
 details.sec + details.sec { margin-top: 0; }
+
+/* MERGED RUBRIC TABLE */
+table.rubric.merged td:first-child { width: 30%; }
+table.rubric.merged td.c { width: 96px; }
+table.rubric.merged .cl { margin: 0; }
+table.rubric.merged .cl + .cl { margin-top: 8px; }
+table.rubric.merged td.cm .src { display: block; margin: 0 0 2px; color: var(--ink-2); font-size: 10px; }
+table.rubric.merged thead th { white-space: nowrap; }
